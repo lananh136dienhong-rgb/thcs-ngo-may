@@ -19,10 +19,50 @@ function doc_(id) {
   if (!d) throw new AppError('Không tìm thấy văn bản', 'NOTFOUND');
   return d;
 }
+// ---- cơ quan ban hành (thẻ phân loại thứ hai, Hiệu trưởng tự thêm/sửa/xóa) ----
+function code_(v) { const s = String(v == null ? '' : v).replace(/^'/, '').trim(); return /^\d+$/.test(s) ? s.padStart(2, '0') : s; }
+function seedAgencies_() {
+  if (Db.all('Agencies').length) return;
+  AGENCIES.forEach(function (a) { Db.append('Agencies', { code: a.code, name: a.name, folder: a.folder, active: true }); });
+}
+function agencies_() {
+  seedAgencies_();
+  return Db.all('Agencies').filter(function (a) { return yes_(a.active); }).map(function (a) { return { code: code_(a.code), name: a.name, folder: a.folder, _row: a._row }; });
+}
 function agency_(code) {
-  const a = AGENCIES.find(function (x) { return x.code === String(code); });
-  if (!a) throw new AppError('Cơ quan ban hành không hợp lệ', 'BAD');
+  const a = agencies_().find(function (x) { return x.code === code_(code); });
+  if (!a) throw new AppError('Hãy chọn cơ quan ban hành', 'BAD');
   return a;
+}
+function typeFolder_(tag) { return TYPE_FOLDERS[tag] || slug_(tag); }
+function agencyName_(v, label) { return str_(v, 80, label || 'Tên cơ quan', true); }
+function apiAddAgency_(u, r) {
+  admin_(u);
+  const n = agencyName_(r.name), list = agencies_();
+  if (list.some(function (a) { return plain_(a.name) === plain_(n); })) throw new AppError('Cơ quan này đã tồn tại', 'BAD');
+  let max = 0;
+  Db.all('Agencies').forEach(function (a) { const k = parseInt(code_(a.code), 10); if (k > max) max = k; });
+  const code = String(max + 1).padStart(2, '0'), folder = code + '_' + slug_(n).toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60);
+  Db.append('Agencies', { code: code, name: n, folder: folder, active: true });
+  return { code: code };
+}
+function apiRenameAgency_(u, r) {
+  admin_(u);
+  const nw = agencyName_(r.name), list = agencies_(), a = list.find(function (x) { return x.code === code_(r.code); });
+  if (!a) throw new AppError('Cơ quan không tồn tại', 'NOTFOUND');
+  if (list.some(function (x) { return x.code !== a.code && plain_(x.name) === plain_(nw); })) throw new AppError('Cơ quan này đã tồn tại', 'BAD');
+  Db.update('Agencies', a._row, { name: nw });   // chỉ đổi tên hiển thị, thư mục Drive giữ nguyên
+  return true;
+}
+function apiDeleteAgency_(u, r) {
+  admin_(u);
+  const list = agencies_(), a = list.find(function (x) { return x.code === code_(r.code); });
+  if (!a) throw new AppError('Cơ quan không tồn tại', 'NOTFOUND');
+  if (list.length <= 1) throw new AppError('Phải còn ít nhất một cơ quan ban hành', 'BAD');
+  const n = Db.all('Documents').filter(function (d) { return !yes_(d.is_deleted) && code_(d.agency) === a.code; }).length;
+  if (n) throw new AppError('Không xóa được: còn ' + n + ' văn bản thuộc cơ quan này. Hãy chuyển các văn bản đó sang cơ quan khác trước, hoặc đổi tên cơ quan.', 'BAD');
+  Db.update('Agencies', a._row, { active: false });
+  return true;
 }
 // Thư mục con theo tên; thư mục cơ quan khớp theo mã đầu tên ("03_..."), nhờ vậy dùng được cả thư mục có sẵn của Hiệu trưởng.
 function agencyFolder_(root, ag) {
@@ -34,7 +74,7 @@ function agencyFolder_(root, ag) {
   return root.createFolder(ag.folder);
 }
 function fileDoc_(d, ag, tag) {
-  const root = DriveApp.getFolderById(prop_('FOLDER_VANBAN')), dest = child_(agencyFolder_(root, ag), TYPE_FOLDERS[tag] || slug_(tag));
+  const root = DriveApp.getFolderById(prop_('FOLDER_VANBAN')), dest = child_(agencyFolder_(root, ag), typeFolder_(tag));
   DriveApp.getFileById(d.drive_file_id).moveTo(dest);
 }
 // Hiệu trưởng đồng ý (hoặc sửa) phân loại: tệp được chuyển vào thư mục, các nhiệm vụ AI gợi ý được đưa vào danh sách chờ duyệt.

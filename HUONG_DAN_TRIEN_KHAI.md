@@ -270,7 +270,7 @@ Khi trường phát triển (nhiều người dùng, nhiều tệp, cần chat t
 ### 14.1 AI làm gì
 1. Hiệu trưởng (hoặc nhân viên) **tải văn bản** lên website. Tệp nằm ở thư mục tạm `VanBan/_Cho_xac_nhan` trong Drive.
 2. **Gemini đọc** văn bản và gợi ý: loại văn bản, cơ quan ban hành, số ký hiệu, trích yếu và các việc nhà trường phải làm (tên, nội dung, hạn).
-3. Ở mục **Tải văn bản**, Hiệu trưởng bấm **Đồng ý phân loại** hoặc **Sửa thẻ**. Chỉ lúc này tệp mới được chuyển vào thư mục `VanBan/<cơ quan>/<loại>` và hiện trong **Kho văn bản**.
+3. Ở mục **Tải văn bản**, mỗi văn bản chờ phân loại có sẵn hai ô **Loại văn bản** và **Cơ quan ban hành** (AI điền sẵn nếu bật; AI tắt thì để trống để chọn tay), kèm độ tin cậy và dòng "Sẽ lưu vào: Drive › ...". Hiệu trưởng giữ hoặc đổi lựa chọn rồi bấm **Lưu và đồng ý**. **Bắt buộc chọn đủ cả hai** thì tệp mới được chuyển vào thư mục `VanBan/<cơ quan>/<loại>` và hiện trong **Kho văn bản**. Cuối trang có hai khu vực **Thẻ phân loại theo loại văn bản** và **Thẻ phân loại theo cơ quan ban hành** để thêm, đổi tên, xóa (cơ quan mới tự có thư mục `10_...`, `11_...` trên Drive; chỉ xóa được cơ quan chưa có văn bản).
 4. Các việc AI tìm thấy xuất hiện ở mục **Đề xuất nhiệm vụ từ AI**. Hiệu trưởng xem lại, chọn người được giao và bổ sung rồi mới giao. AI chỉ điền tên, nội dung, thời hạn.
 
 AI chỉ **gợi ý**. Không có thao tác thật nào (đưa tệp vào thư mục, tạo nhiệm vụ) xảy ra khi chưa có người bấm xác nhận.
@@ -298,7 +298,7 @@ AI chỉ **gợi ý**. Không có thao tác thật nào (đưa tệp vào thư m
 
 **Bước 3. Cập nhật backend trong Apps Script** (làm TRƯỚC khi mở website bản mới, hoặc ngay sau; ít nhất phải làm xong trước khi dùng):
 1. Mở dự án Apps Script. Dán lại **toàn bộ** các file: `Code.gs`, `Db.gs`, `Api.gs`, `Docs.gs`, `Setup.gs`. **Tạo file mới `Ai.gs`** (dấu + cạnh "Files" → Script) và dán nội dung `backend/Ai.gs`. `Auth.gs` và `appsscript.json` không đổi.
-2. Nhấn **Lưu**. Chọn hàm **`upgrade`** → **Chạy**. Hàm này thêm các cột/sheet còn thiếu (`AiSuggestions`, `AiFeedback`, các cột `ai_*` của `Documents`, cột `src_doc` của `Tasks`), thêm 11 thẻ loại văn bản mặc định còn thiếu và tạo thư mục `_Cho_xac_nhan`. Chạy lại nhiều lần vẫn an toàn.
+2. Nhấn **Lưu**. Chọn hàm **`upgrade`** → **Chạy**. Hàm này thêm các cột/sheet còn thiếu (`Agencies` chứa danh sách cơ quan, `AiSuggestions`, `AiFeedback`, các cột `ai_*` của `Documents`, cột `src_doc` của `Tasks`), thêm 11 thẻ loại văn bản mặc định còn thiếu và tạo thư mục `_Cho_xac_nhan`. Chạy lại nhiều lần vẫn an toàn.
 3. Lần chạy đầu Google hỏi cấp quyền thêm (kết nối dịch vụ bên ngoài để gọi Gemini): chọn **Review permissions → Allow**. Nếu thấy "chưa xác minh", chọn Advanced → Go to ... (unsafe) → Allow (vì đây là dự án của chính bạn).
 
 **Bước 4. Tạo khóa Gemini API**
@@ -328,7 +328,7 @@ AI chỉ **gợi ý**. Không có thao tác thật nào (đưa tệp vào thư m
 
 **Bước 11. Thử trên website** (mở bằng Ctrl+F5, đăng nhập bằng tài khoản Hiệu trưởng):
 1. **Tải văn bản** → chọn một công văn thật (không mật) → Tải lên → sau 10 đến 30 giây dòng văn bản hiện gợi ý AI.
-2. Bấm **Đồng ý phân loại** (hoặc **Sửa thẻ** rồi **Lưu phân loại**) → vào Drive kiểm tra tệp đã nằm đúng thư mục `<cơ quan>/<loại>` → mục **Kho văn bản** có văn bản.
+2. Bấm **Lưu và đồng ý** (đổi ô loại/cơ quan trước nếu AI chọn chưa đúng) → vào Drive kiểm tra tệp đã nằm đúng thư mục `<cơ quan>/<loại>` → mục **Kho văn bản** có văn bản.
 3. **Đề xuất nhiệm vụ từ AI** → Xem và giao việc → chọn người → Giao. Mở nhiệm vụ: có dòng **Văn bản nguồn** và nút **Tìm trong kho**.
 4. Đăng nhập bằng tài khoản nhân viên: **Kho văn bản** có bộ lọc mã, tên, loại, cơ quan; thử tải một văn bản lên và xem dòng "chờ phân loại".
 5. Xóa một nhiệm vụ thử: kiểm tra các sheet `Messages`, `History`, `Submissions`... không còn dòng của nhiệm vụ đó, còn tệp trong Drive vẫn nguyên.
@@ -353,10 +353,10 @@ Nếu thư mục cơ quan chưa có, hệ thống tự tạo theo tên chuẩn (
 | "Gemini báo lỗi 400" kèm "API key" | Khóa sai | Tạo lại khóa, dán lại |
 | "Gemini báo lỗi 404" | Tên mô hình đã đổi | Đặt `GEMINI_MODEL` theo tên mới trong tài liệu Gemini |
 | "Gemini đang giới hạn tần suất" (429) | Hết hạn mức / chưa bật thanh toán | Kiểm tra Billing và quota; hệ thống tự thử lại |
-| "AI không đọc được" (failed) | Lỗi tạm thời 3 lần liên tiếp | Bấm **Chạy AI**, hoặc **Sửa thẻ** để phân loại thủ công |
+| "AI không đọc được" (failed) | Lỗi tạm thời 3 lần liên tiếp | Bấm **Chạy AI**, hoặc tự chọn loại và cơ quan rồi **Lưu và đồng ý** |
 | "Hệ thống đang bận" | Nhiều người thao tác cùng lúc | Thử lại sau vài giây |
 | Không có nhiệm vụ nào được gợi ý | Văn bản chỉ để biết, hoặc là văn bản Mật | Bình thường |
-| Sai loại/cơ quan | AI không chắc (độ tin cậy thấp được ghi chú "nên kiểm tra kỹ") | Bấm **Sửa thẻ**; hệ thống ghi nhớ để lần sau tốt hơn |
+| Sai loại/cơ quan | AI không chắc (độ tin cậy thấp được ghi chú "nên kiểm tra kỹ") | Đổi ô loại/cơ quan rồi **Lưu và đồng ý**; hệ thống ghi nhớ để lần sau tốt hơn |
 
 Xem lỗi chi tiết: Apps Script → **Executions** (Nhật ký thực thi).
 

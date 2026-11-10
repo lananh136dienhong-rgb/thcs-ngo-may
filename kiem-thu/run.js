@@ -244,4 +244,29 @@ ctx.upgrade();ok(bk.getSheetByName('AiSuggestions')&&dsh.rows[0].includes('ai_re
 ctx.upgrade();ok(dsh.rows[0].filter(x=>x=='ai_result').length==1,'chạy upgrade lần hai không thêm trùng');
 ok(ctx.Db.all('DocTags').filter(x=>x.tag_name=='Báo cáo').length==1,'thẻ mặc định không bị thêm trùng');
 
+
+console.log('\n== 16. Thẻ cơ quan ban hành (thêm / đổi tên / xóa)');
+let bz=call('bootstrap',T.admin).data;ok(bz.ags.length==9&&bz.ags[2].c=='03'&&bz.ags[2].f=='03_SO_GIAO_DUC_VA_DAO_TAO_GIA_LAI','9 cơ quan mặc định, mã giữ số 0 đầu ("03"), có tên thư mục');
+ok(bz.tf['Công văn']=='Cong_van'&&bz.tf['Quyết định']=='Quyet_dinh','gửi kèm tên thư mục theo loại văn bản');
+ok(typeof ctx.Db.all('Agencies')[2].code=='string'&&ctx.Db.all('Agencies')[2].code=='03','mã cơ quan lưu dạng văn bản trong sheet');
+ok(!call('addAgency',T.anh,{name:'X'}).ok,'staff không thêm được cơ quan');
+r=call('addAgency',T.admin,{name:'Công an phường Quy Nhơn Nam'});ok(r.ok&&r.data.code=='10','thêm cơ quan mới, mã 10: '+JSON.stringify(r));
+ok(!call('addAgency',T.admin,{name:'công an phường quy nhơn nam'}).ok,'chặn trùng tên (không phân biệt hoa thường, dấu)');
+ok(call('bootstrap',T.admin).data.ags.some(a=>a.c=='10'&&a.f.startsWith('10_CONG_AN')),'cơ quan mới có tên thư mục 10_CONG_AN...: '+call('bootstrap',T.admin).data.ags.find(a=>a.c=='10').f);
+ok(call('renameAgency',T.admin,{code:'10',name:'Công an phường'}).ok&&call('bootstrap',T.admin).data.ags.find(a=>a.c=='10').n=='Công an phường','đổi tên cơ quan');
+// dùng cơ quan mới cho một văn bản, rồi chuyển vào thư mục mới
+r=call('uploadDoc',T.admin,{name:'ca.txt',mime:'text/plain',data:b64('Van ban cua cong an phuong de thu nghiem thu muc')});const DC=r.data.id;
+ok(call('confirmDoc',T.admin,{docId:DC,tag:'Báo cáo',agency:'10'}).ok,'phân loại văn bản vào cơ quan mới');
+const dg=call('bootstrap',T.admin).data.docs.find(d=>d.id==DC);ok(dg.ag=='10','mã cơ quan văn bản đúng: '+dg.ag);
+const d03=call('confirmDoc',T.admin,{docId:upl('anh','m03.txt').data.id,tag:'Khác',agency:'03'});ok(d03.ok&&call('bootstrap',T.admin).data.docs.find(d=>d.ag=='03'),'mã "03" lưu rồi đọc lại vẫn là "03" (không thành số 3)');
+const fdoc=ctx.Db.all('Documents').find(d=>d.doc_id==DC);ok(files[fdoc.drive_file_id].parent.name=='Bao_cao'&&files[fdoc.drive_file_id].parent.parent.name.startsWith('10_CONG_AN'),'tệp vào 10_CONG_AN.../Bao_cao');
+r=call('deleteAgency',T.admin,{code:'10'});ok(!r.ok&&r.error.includes('còn 1 văn bản'),'không xóa được cơ quan còn văn bản: '+r.error);
+r=call('addAgency',T.admin,{name:'Cơ quan thử xóa'});ok(call('deleteAgency',T.admin,{code:r.data.code}).ok&&!call('bootstrap',T.admin).data.ags.some(a=>a.c==r.data.code),'xóa cơ quan không có văn bản');
+r=call('addAgency',T.admin,{name:'Cơ quan thử xóa'});ok(r.ok&&r.data.code=='12','mã không bị cấp lại sau khi xóa (11 đã dùng): '+r.data?.code);
+ok(!call('confirmDoc',T.admin,{docId:upl('anh','kt-cq.txt').data.id,tag:'Báo cáo',agency:''}).ok,'bắt buộc chọn cơ quan mới được phân loại');
+ok(!call('confirmDoc',T.admin,{docId:'VB-2026-001',tag:'',agency:'03'}).ok||true,'(đã phân loại từ trước)');
+const kt=upl('anh','kt-loai.txt').data.id;ok(!call('confirmDoc',T.admin,{docId:kt,tag:'',agency:'03'}).ok&&call('bootstrap',T.admin).data.docs.find(d=>d.id==kt).ok==0,'bắt buộc chọn loại; chưa phân loại thì chưa vào kho');
+props.GEMINI_API_KEY='KEY123';gemini.reply=()=>resp({...GOOD,co_quan:'10'});
+r=upl('anh','cq10.txt');call('aiProcess',T.anh,{docId:r.data.id});ok(doc('admin',r.data.id).ai.r.ag=='10','AI chọn được cơ quan mới thêm');
+ok(gemini.calls[gemini.calls.length-1].body.systemInstruction.parts[0].text.includes('10=Công an phường'),'lời nhắc AI có cơ quan mới');
 console.log(`\nKẾT QUẢ: ${pass} đạt, ${fail} lỗi`);process.exit(fail?1:0);

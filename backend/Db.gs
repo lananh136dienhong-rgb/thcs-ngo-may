@@ -16,6 +16,7 @@ const SCHEMA = {
     'agency', 'doc_no', 'summary', 'ai_status', 'ai_tries', 'ai_at', 'ai_error', 'ai_result'],
   DocTags: ['tag_id', 'tag_name', 'active'],
   Notifications: ['notif_id', 'to_user_id', 'text', 'task_id', 'created_at', 'is_read'],
+  Agencies: ['code', 'name', 'folder', 'active'],
   AiSuggestions: ['sug_id', 'doc_id', 'title', 'description', 'due_date', 'source_text', 'how', 'status', 'task_id', 'created_at'],
   AiFeedback: ['fb_id', 'doc_name', 'ai_tag', 'ai_agency', 'final_tag', 'final_agency', 'at']
 };
@@ -94,7 +95,8 @@ const Db = (function () {
     return v;
   }
   // Chặn "công thức độc hại": văn bản bắt đầu bằng = + - @ sẽ bị Sheets hiểu là công thức.
-  function safe(v) { return (typeof v === 'string' && /^[=+\-@]/.test(v)) ? "'" + v : v; }
+  // Chuỗi toàn chữ số (như mã cơ quan "03") cũng được giữ là văn bản, nếu không Sheets sẽ đổi "03" thành số 3.
+  function safe(v) { return (typeof v === 'string' && (/^[=+\-@]/.test(v) || /^\d+$/.test(v))) ? "'" + v : v; }
 
   function readSheet(n) {
     const vals = sheet(n).getDataRange().getValues();

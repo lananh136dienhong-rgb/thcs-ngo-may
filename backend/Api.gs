@@ -12,7 +12,7 @@ function routes_() {
     requestExt: apiRequestExt_, decideExt: apiDecideExt_, extendTask: apiExtend_,
     approveTask: apiApprove_, requestMore: apiRequestMore_, addAssignee: apiAddAssignee_, sendMsg: apiSendMsg_,
     downloadTaskFile: apiDownloadTaskFile_,
-    uploadDoc: apiUploadDoc_, confirmDoc: apiConfirmDoc_, aiProcess: apiAiProcess_, approveSuggestion: apiApproveSuggestion_, skipSuggestion: apiSkipSuggestion_, deleteDoc: apiDeleteDoc_, downloadDoc: apiDownloadDoc_,
+    uploadDoc: apiUploadDoc_, confirmDoc: apiConfirmDoc_, addAgency: apiAddAgency_, renameAgency: apiRenameAgency_, deleteAgency: apiDeleteAgency_, aiProcess: apiAiProcess_, approveSuggestion: apiApproveSuggestion_, skipSuggestion: apiSkipSuggestion_, deleteDoc: apiDeleteDoc_, downloadDoc: apiDownloadDoc_,
     addTag: apiAddTag_, renameTag: apiRenameTag_, deleteTag: apiDeleteTag_, updateProfile: apiUpdateProfile_
   };
 }
@@ -22,7 +22,8 @@ function apiBootstrap_(u) {
   return {
     today: today_(), me: me_(u), tasks: tasksView_(u), docs: docsView_(u), notifs: notifsView_(u),
     people: peopleView_(u), sug: suggestionsView_(u), ai: aiEnabled_() ? 1 : 0,
-    ags: AGENCIES.map(function (a) { return { c: a.code, n: a.name }; }),
+    ags: agencies_().map(function (a) { return { c: a.code, n: a.name, f: a.folder }; }),
+    tf: Db.all('DocTags').filter(function (t) { return yes_(t.active); }).reduce(function (m, t) { m[t.tag_name] = typeFolder_(t.tag_name); return m; }, {}),
     tags: Db.all('DocTags').filter(function (t) { return yes_(t.active); }).map(function (t) { return t.tag_name; }),
     maxFileMB: CFG.MAX_FILE_MB
   };
@@ -54,7 +55,7 @@ function docsView_(u) {
   Db.all('Users').forEach(function (x) { name[x.user_id] = x.full_name; });
   return Db.all('Documents').filter(function (d) { return !yes_(d.is_deleted) && (admin || yes_(d.reviewed) || d.uploaded_by === u.user_id); })
     .map(function (d) {
-      return { id: d.doc_id, n: d.name, sz: d.size_bytes, d: String(d.uploaded_at).slice(0, 10), by: name[d.uploaded_by] || '', k: d.tag || '', ok: yes_(d.reviewed) ? 1 : 0, ag: d.agency || '', no: d.doc_no || '', sm: d.summary || '', ai: aiDocView_(d, admin), mine: d.uploaded_by === u.user_id ? 1 : 0 };
+      return { id: d.doc_id, n: d.name, sz: d.size_bytes, d: String(d.uploaded_at).slice(0, 10), by: name[d.uploaded_by] || '', k: d.tag || '', ok: yes_(d.reviewed) ? 1 : 0, ag: code_(d.agency), no: d.doc_no || '', sm: d.summary || '', ai: aiDocView_(d, admin), mine: d.uploaded_by === u.user_id ? 1 : 0 };
     });
 }
 function tasksView_(u, onlyId) {

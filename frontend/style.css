@@ -13,7 +13,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .nv em{margin-left:auto;font-style:normal;font-size:11px;background:#ffffff26;border-radius:99px;padding:1px 8px}
 .nv .dot{margin-left:auto;width:7px;height:7px;border-radius:50%;background:#4da3ff}
 .help{margin-top:auto;background:#ffffff0d;border:1px solid #ffffff1a;border-radius:14px;padding:14px;font-size:12px}
-.me{display:flex;align-items:center;gap:10px;margin-top:12px;padding:8px;border:0;background:none;color:#fff;cursor:pointer;text-align:left;border-radius:10px;width:100%}
+.me{display:flex;align-items:center;gap:10px;margin-top:auto;padding:8px;border:0;background:none;color:#fff;cursor:pointer;text-align:left;border-radius:10px;width:100%}
 .me:hover{background:#ffffff12}.me small{display:block;color:#9fb2cf;font-weight:500}
 .av{width:30px;height:30px;border-radius:50%;background:var(--hi);color:var(--pri);display:grid;place-items:center;font-size:11px;font-weight:800;flex:none}
 .mn{min-width:0}.top{display:flex;gap:14px;align-items:center;padding:12px 28px;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
@@ -73,3 +73,4 @@ body.busy::before{content:"";position:fixed;top:0;left:0;height:3px;width:100%;z
 
 .aitag{display:inline-block;font-size:11px;font-weight:800;color:var(--bt);background:var(--hi);border-radius:99px;padding:2px 8px}
 .tr select{max-width:100%}
+.upw{border-top:1px solid var(--line)}.upw:first-of-type{border-top:0}.upd{padding:0 6px 14px;font-size:13px;line-height:1.65;min-width:1000px}.upd .sub{margin:0}

@@ -23,9 +23,10 @@ const LISTS = {
 // Các hành động có ghi dữ liệu: chạy trong khóa để hai người thao tác cùng lúc không làm hỏng dữ liệu.
 const WRITE_ACTIONS = ['readNotifs', 'createTask', 'editTask', 'deleteTask', 'acceptTask', 'progress', 'submitTask',
   'requestExt', 'decideExt', 'extendTask', 'approveTask', 'requestMore', 'addAssignee', 'sendMsg',
-  'uploadDoc', 'confirmDoc', 'deleteDoc', 'addTag', 'renameTag', 'deleteTag', 'updateProfile', 'approveSuggestion', 'skipSuggestion'];
+  'uploadDoc', 'confirmDoc', 'deleteDoc', 'addTag', 'renameTag', 'deleteTag', 'updateProfile', 'approveSuggestion', 'skipSuggestion', 'addAgency', 'renameAgency', 'deleteAgency'];
 
-// Cơ quan ban hành: mã (tiền tố tên thư mục trong Drive), tên hiển thị và tên thư mục sẽ tạo nếu chưa có.
+// Cơ quan ban hành MẶC ĐỊNH (chỉ dùng để tạo dữ liệu ban đầu trong sheet Agencies; sau đó Hiệu trưởng tự thêm/sửa/xóa trên website).
+// Mã là tiền tố tên thư mục trong Drive; folder là tên thư mục sẽ tạo nếu chưa có.
 const AGENCIES = [
   { code: '01', name: 'Bộ Giáo dục và Đào tạo', folder: '01_BO_GIAO_DUC_VA_DAO_TAO' },
   { code: '02', name: 'UBND tỉnh Gia Lai', folder: '02_UBND_TINH_GIA_LAI' },

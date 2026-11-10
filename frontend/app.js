@@ -5,14 +5,14 @@
  *  - Các hàm vẽ giao diện (aOv, sOv, dtl, modal, draw...) đọc các biến này và dựng HTML.
  *  - Mọi thao tác ghi dữ liệu đi qua act(...) → API.call → backend kiểm tra quyền → tải lại dữ liệu → vẽ lại.
  */
-let ME='',TD='',TAGS=[],T=[],D=[],N=[],PPL=[],SUG=[],AGS=[],AIOK=0;
+let ME='',TD='',TAGS=[],T=[],D=[],N=[],PPL=[],SUG=[],AGS=[],TF={},AIOK=0;
 const PR={a:null,s:null,l:null};   // hồ sơ người đang đăng nhập (dùng chung cho 3 vai trò)
 const $=s=>document.querySelector(s),fd=i=>i.split('-').reverse().join('/'),ini=n=>n.split(' ').slice(-2).map(w=>w[0]).join('');
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const TO=['Ban giám hiệu','Tổ GDTC – Nghệ thuật','Tổ KHTN – Công nghệ','Tổ Ngữ văn – GDCD','Tổ Sử – Địa','Tổ Tiếng Anh','Tổ Toán – Tin','Tổ Văn phòng'];
 const ST=['Chưa tiếp nhận','Đang thực hiện','Chờ duyệt','Yêu cầu bổ sung','Đã hoàn thành'];
 const SC={'Chưa tiếp nhận':'g','Đang thực hiện':'b','Chờ duyệt':'a','Yêu cầu bổ sung':'p','Đã hoàn thành':'ok'};
-const S={role:'s',page:'ov',tid:null,m:null,tab:'Tất cả',f:{q:'',st:'',cs:'',to:'',who:''},pick:[],rf:{a:'',b:'',who:'',to:'',cs:'',st:''},err:'',ef:[],kf:{q:'',k:'',ag:''},edit:null,sug:null};
+const S={role:'s',page:'ov',tid:null,m:null,tab:'Tất cả',f:{q:'',st:'',cs:'',to:'',who:''},pick:[],rf:{a:'',b:'',who:'',to:'',cs:'',st:''},err:'',ef:[],kf:{q:'',k:'',ag:''},edit:null,sug:null,sel:{}};
 const rk=()=>S.role=='a'?'a':'s',nl=r=>N.filter(n=>n.r==r&&(r=='a'||!n.id||find(n.id)?.as.includes(ME)));
 const nextId=()=>'NV-0'+(Math.max(0,...T.map(t=>+t.id.slice(3)))+1);
 const od=t=>t.st!='Đã hoàn thành'&&t.due<TD,find=id=>T.find(t=>t.id==id),mine=()=>T.filter(t=>t.as.includes(ME));
@@ -62,20 +62,22 @@ const nrm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
 const kfl=L=>{const f=S.kf,q=nrm(f.q).trim();return L.filter(d=>(!q||nrm(d.id+' '+d.n+' '+d.no+' '+d.sm).includes(q))&&(!f.k||d.k==f.k)&&(!f.ag||d.ag==f.ag))};
 const RUN=new Set(),KICK=new Set();let aiQ=Promise.resolve();
 const upForm=adm=>`<form class="card fm" data-f="doc" style="margin-bottom:14px"><input type="file" name="fl" required> <button class="btn t">Tải lên</button><div class="sub" style="margin-top:8px">${adm?(AIOK?'Sau khi tải lên, AI đọc văn bản và gợi ý phân loại để bạn xác nhận. ':'AI chưa được bật nên bạn phân loại thủ công. '):'Văn bản bạn tải lên sẽ chờ Hiệu trưởng xác nhận phân loại rồi mới vào kho. '}Hệ thống chặn văn bản trùng tên và dung lượng.</div><div class="err">${esc(S.err)}</div></form>`;
-const tagCard=()=>`<div class="card" style="margin-bottom:14px"><h2>Thẻ phân loại (loại văn bản)</h2><div class="sub" style="margin-bottom:8px">Thêm, đổi tên hoặc xóa thẻ. AI chỉ chọn trong các thẻ này. Đổi tên sẽ cập nhật cho mọi văn bản đang dùng thẻ đó.</div>${TAGS.map(g=>`<span class="chip">${esc(g)}<button data-a="tren" data-v="${esc(g)}" aria-label="Đổi tên ${esc(g)}">✎</button><button data-a="tdel" data-v="${esc(g)}" aria-label="Xóa ${esc(g)}">✕</button></span>`).join('')}<form data-f="tag" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><input name="g" placeholder="Tên thẻ mới" required><button class="btn o">Thêm thẻ</button></form></div>`;
-function aiCell(d){const a=d.ai||{},st=a.st;
- if(RUN.has(d.id)||st=='reading'||st=='queued')return '<span class="aitag">✦ AI đang đọc văn bản…</span>';
- if(st=='ready'&&a.r){const r=a.r;return `<div><span class="aitag">✦ AI gợi ý</span> <span class="bd b">${esc(r.k||'Chưa rõ loại')}</span> <span class="bd g">${esc(AGN(r.ag))}</span></div><div class="sub">Độ tin cậy ${r.conf}%${r.conf<60?' · nên kiểm tra kỹ':''}${r.num?' · Số '+esc(r.num):''}</div>${r.sum?`<div class="sub">${esc(r.sum)}</div>`:''}${r.mat?'<div class="sub" style="color:#d23b3b">⚠ Văn bản Mật: AI không gợi ý nhiệm vụ</div>':''}`}
- if(st=='failed')return `<span class="sub" style="color:#d23b3b">AI không đọc được: ${esc(a.err||'lỗi không rõ')}</span>`;
- if(st=='skipped')return `<span class="sub">${esc(a.err||'AI không đọc được tệp này')}</span>`;
- return `<span class="sub">${AIOK?'Chưa có gợi ý AI cho văn bản này':'AI đang tắt, hãy phân loại thủ công'}</span>`}
-function upRow(d){const gt='95px minmax(150px,1.5fr) 110px minmax(190px,1.5fr) 60px 260px',a=d.ai||{},r=a.r,ed=S.edit==d.id;
- const ctl=ed?`<span style="display:flex;gap:6px;flex-wrap:wrap"><select id="ek"><option value="">Chọn loại văn bản</option>${TAGS.map(g=>`<option ${g==(r?.k||'')?'selected':''}>${esc(g)}</option>`).join('')}</select><select id="ea">${AGS.map(x=>`<option value="${x.c}" ${x.c==(r?.ag||'09')?'selected':''}>${esc(x.c+' · '+x.n)}</option>`).join('')}</select><button class="btn t" data-a="csave" data-id="${d.id}">Lưu phân loại</button><button class="btn" data-a="ccancel">Hủy</button></span>`
-  :`<span style="display:flex;gap:6px;flex-wrap:wrap">${a.st=='ready'&&r&&!RUN.has(d.id)?`<button class="btn t" data-a="agree" data-id="${d.id}">Đồng ý phân loại</button>`:''}<button class="btn o" data-a="cedit" data-id="${d.id}">Sửa thẻ</button>${AIOK&&!RUN.has(d.id)&&a.st!='ready'&&a.st!='reading'&&a.st!='queued'?`<button class="btn" data-a="runai" data-id="${d.id}">Chạy AI</button>`:''}<button class="btn" data-a="ddel" data-id="${d.id}" style="color:#d23b3b" aria-label="Xóa ${d.id}">Xóa</button></span>`;
- return `<div class="tr" style="grid-template-columns:${gt};min-width:960px;cursor:default;align-items:start"><b>${d.id}</b><span>${esc(d.n)}<div class="sub"><button class="btn" data-a="ddl" data-id="${d.id}" style="padding:2px 8px;font-size:12px">⬇ Tải</button></div></span><span>${esc(d.by)}<div class="sub">${fd(d.d)}</div></span><div>${aiCell(d)}</div><span>${r?.nt??0}</span>${ctl}</div>`}
-function aUp(){const P=D.filter(d=>!d.ok),gt='95px minmax(150px,1.5fr) 110px minmax(190px,1.5fr) 60px 260px';
-return `<h1>Tải văn bản</h1><p class="sub">Tải văn bản mới lên, AI đọc và gợi ý phân loại. Bạn đồng ý hoặc sửa thẻ thì văn bản mới được đưa vào thư mục trong Drive và vào Kho văn bản; các nhiệm vụ AI tìm thấy sẽ chuyển sang mục Đề xuất nhiệm vụ từ AI.</p>${upForm(1)}
-<div class="card sc" style="margin-bottom:14px"><h2>Chờ xác nhận phân loại (${P.length})</h2><div style="height:8px"></div><div class="tr h" style="grid-template-columns:${gt};min-width:960px"><span>MÃ VĂN BẢN</span><span>TÊN TỆP</span><span>NGƯỜI TẢI</span><span>AI GỢI Ý</span><span>NV</span><span>THAO TÁC</span></div>${P.map(upRow).join('')||'<p class="sub" style="padding:20px">Không có văn bản nào đang chờ phân loại.</p>'}</div>${tagCard()}`}
+const tagCard=()=>`<div class="card" style="margin-bottom:14px"><h2>Thẻ phân loại theo loại văn bản</h2><div class="sub" style="margin-bottom:8px">Thêm, đổi tên hoặc xóa thẻ. AI chỉ chọn trong các thẻ này. Đổi tên sẽ cập nhật cho mọi văn bản đang dùng thẻ đó.</div>${TAGS.map(g=>`<span class="chip">${esc(g)}<button data-a="tren" data-v="${esc(g)}" aria-label="Đổi tên ${esc(g)}">✎</button><button data-a="tdel" data-v="${esc(g)}" aria-label="Xóa ${esc(g)}">✕</button></span>`).join('')}<form data-f="tag" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><input name="g" placeholder="Tên thẻ mới" required><button class="btn o">Thêm thẻ</button></form></div>
+<div class="card" style="margin-bottom:14px"><h2>Thẻ phân loại theo cơ quan ban hành</h2><div class="sub" style="margin-bottom:8px">Thêm cơ quan mới khi cần (hệ thống tự tạo thư mục tương ứng trong Drive). Đổi tên chỉ đổi tên hiển thị. Chỉ xóa được cơ quan chưa có văn bản nào.</div>${AGS.map(g=>`<span class="chip">${esc(g.n)}<button data-a="aren" data-v="${g.c}" aria-label="Đổi tên ${esc(g.n)}">✎</button><button data-a="adel" data-v="${g.c}" aria-label="Xóa ${esc(g.n)}">✕</button></span>`).join('')}<form data-f="agency" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><input name="g" placeholder="Tên cơ quan mới" required style="min-width:260px"><button class="btn o">Thêm cơ quan</button></form></div>`;
+const svp=(k,c)=>{const g=AGS.find(x=>x.c==c);return k&&g?`Sẽ lưu vào: Drive › <b>${esc(g.f)}</b> › <b>${esc(TF[k]||k)}</b>`:'Hãy chọn loại văn bản và cơ quan ban hành để đưa văn bản vào kho.'};
+const UPG='95px minmax(150px,1.3fr) 90px minmax(140px,1fr) minmax(170px,1.2fr) 70px 200px';
+function upRow(d){const a=d.ai||{},r=a.r,run=RUN.has(d.id)||a.st=='reading'||a.st=='queued',sel=S.sel[d.id]||{k:r?.k||'',ag:r?.ag||''};
+ const cf=r?`<span class="bd ${r.conf>=80?'ok':r.conf>=60?'a':'r'}">${r.conf}%</span>`:'<span class="sub">—</span>';
+ let l1;if(r)l1=[r.num&&`<b>${esc(r.num)}</b>`,r.date&&fd(r.date),r.sum&&esc(r.sum),'tải bởi '+esc(d.by)].filter(Boolean).join(' · ');
+ else l1=`Tải bởi ${esc(d.by)} · `+(run?'<span class="aitag">✦ AI đang đọc văn bản…</span>':a.st=='failed'?`<span style="color:#d23b3b">AI không đọc được: ${esc(a.err||'lỗi không rõ')}</span>`:a.st=='skipped'?esc(a.err||'AI không đọc được tệp này'):AIOK?'chưa có gợi ý AI, bạn phân loại thủ công':'AI đang tắt, bạn phân loại thủ công');
+ return `<div class="upw"><div class="tr" style="grid-template-columns:${UPG};min-width:1000px;cursor:default;border-top:0"><b style="color:var(--bt)">${d.id}</b><span>${esc(d.n)}<div class="sub"><button class="btn" data-a="ddl" data-id="${d.id}" style="padding:2px 8px;font-size:12px">⬇ Tải</button></div></span><span>${fd(d.d)}</span>
+<select data-sel="k" data-id="${d.id}" aria-label="Loại văn bản"><option value="">Chọn loại văn bản</option>${TAGS.map(g=>`<option ${g==sel.k?'selected':''}>${esc(g)}</option>`).join('')}</select>
+<select data-sel="ag" data-id="${d.id}" aria-label="Cơ quan ban hành"><option value="">Chọn cơ quan ban hành</option>${AGS.map(x=>`<option value="${x.c}" ${x.c==sel.ag?'selected':''}>${esc(x.n)}</option>`).join('')}</select>${cf}
+<span style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn t" data-a="cfm" data-id="${d.id}" ${run?'disabled':''}>Lưu và đồng ý</button>${AIOK&&!run&&a.st!='ready'?`<button class="btn" data-a="runai" data-id="${d.id}">Chạy AI</button>`:''}<button class="btn" data-a="ddel" data-id="${d.id}" style="color:#d23b3b" aria-label="Xóa ${d.id}">Xóa</button></span></div>
+<div class="upd"><div>${l1}</div>${r?.q?`<div class="sub"><i>“${esc(r.q)}”</i></div>`:''}<div id="sv-${d.id}">${svp(sel.k,sel.ag)}</div>${r?.nt?`<div class="sub">✦ AI tìm thấy ${r.nt} việc cần làm. Sau khi bạn đồng ý, các việc này xuất hiện ở mục “Đề xuất nhiệm vụ từ AI”.</div>`:''}${r?.mat?'<div style="color:#d23b3b">⚠ Văn bản Mật: AI không gợi ý nhiệm vụ. Không nên tải văn bản mật lên hệ thống.</div>':''}</div></div>`}
+function aUp(){const P=D.filter(d=>!d.ok);
+return `<h1>Tải văn bản</h1><p class="sub">Tải văn bản mới lên. AI (nếu bật) đọc và gợi ý phân loại; nếu không bạn tự chọn. <b>Văn bản chỉ vào Kho văn bản sau khi bạn chọn loại văn bản, cơ quan ban hành và bấm “Lưu và đồng ý”.</b></p>${upForm(1)}
+<div class="card sc" style="margin-bottom:14px"><h2>Chờ xác nhận phân loại (${P.length})</h2><div class="sub" style="margin-bottom:8px">Muốn sửa gợi ý của AI, đổi lựa chọn trong ô rồi bấm “Lưu và đồng ý”. Hệ thống ghi nhận các lần sửa để gợi ý chính xác hơn.</div><div class="tr h" style="grid-template-columns:${UPG};min-width:1000px"><span>MÃ VĂN BẢN</span><span>TÊN TỆP</span><span>NGÀY TẢI</span><span>LOẠI${AIOK?' (AI GỢI Ý)':''}</span><span>CƠ QUAN${AIOK?' (AI GỢI Ý)':''}</span><span>TIN CẬY</span><span>THAO TÁC</span></div>${P.map(upRow).join('')||'<p class="sub" style="padding:20px">Không có văn bản nào đang chờ phân loại.</p>'}</div>${tagCard()}`}
 function khoList(adm){const L=kfl(D.filter(d=>d.ok)),gt=`110px minmax(180px,2fr) 90px 130px minmax(160px,1.4fr) ${adm?150:100}px`;
  return `<div class="tr h" style="grid-template-columns:${gt};min-width:900px"><span>MÃ VĂN BẢN</span><span>TÊN TỆP</span><span>NGÀY TẢI</span><span>LOẠI VĂN BẢN</span><span>CƠ QUAN BAN HÀNH</span><span></span></div>`
  +(L.map(d=>`<div class="tr" style="grid-template-columns:${gt};min-width:900px;cursor:default"><b>${esc(d.id)}</b><span>${esc(d.n)}${d.no?`<div class="sub">Số ${esc(d.no)}</div>`:''}</span><span>${fd(d.d)}</span><span>${d.k?`<span class="bd b">${esc(d.k)}</span>`:'<span class="sub">—</span>'}</span><span>${d.ag?esc(AGN(d.ag)):'<span class="sub">—</span>'}</span><span><button class="btn" data-a="ddl" data-id="${d.id}">⬇ Tải</button>${adm?` <button class="btn" data-a="ddel" data-id="${d.id}" style="color:#d23b3b" aria-label="Xóa ${d.id}">Xóa</button>`:''}</span></div>`).join('')||'<p class="sub" style="padding:20px">Không có văn bản phù hợp. Hãy thử bỏ bớt điều kiện lọc.</p>')}
@@ -188,7 +190,7 @@ saveFile('thong-ke-nhiem-vu-'+TD+'.pdf',mkpdf(J))}
 // loadSeq: nếu có nhiều lần tải chạy song song, chỉ lần gọi MỚI NHẤT được áp dụng (tránh dữ liệu cũ ghi đè dữ liệu mới).
 let loadSeq=0;
 function applyState(d){TD=d.today;ME=d.me.n;PR.a=PR.s=PR.l=d.me;S.role={admin:'a',staff:'s',leader:'l'}[d.me.role];
- T=d.tasks;D=d.docs;N=d.notifs;PPL=d.people;TAGS=d.tags;SUG=d.sug||[];AGS=d.ags||[];AIOK=d.ai||0;CONFIG.MAX_FILE_MB=d.maxFileMB||CONFIG.MAX_FILE_MB;lastList=Date.now();setTimeout(kickAi,0)}
+ T=d.tasks;D=d.docs;N=d.notifs;PPL=d.people;TAGS=d.tags;SUG=d.sug||[];AGS=d.ags||[];TF=d.tf||{};AIOK=d.ai||0;CONFIG.MAX_FILE_MB=d.maxFileMB||CONFIG.MAX_FILE_MB;lastList=Date.now();setTimeout(kickAi,0)}
 async function load(){const my=++loadSeq;const d=await API.call('bootstrap');if(my!==loadSeq)return;applyState(d)}
 function markRead(){N.forEach(n=>n.n=0);API.call('readNotifs').catch(()=>{})}
 const OK_EXT=/\.(pdf|docx|xlsx|pptx|png|jpe?g|mp4|csv|txt)$/i;
@@ -232,9 +234,10 @@ if(a=='exok')return act('decideExt',{id,ok:true},'Đã đồng ý gia hạn');
 if(a=='exno'){const c=$('#ec').value.trim();if(!c)return toast('Hãy nhập ý kiến khi không đồng ý');return act('decideExt',{id,ok:false,note:c},'Đã từ chối, thời hạn giữ nguyên')}
 if(a=='xt'){const d=$('#xd').value;if(!d||d<=t.due)return toast('Hãy chọn ngày mới sau thời hạn hiện tại');return act('extendTask',{id,date:d},'Đã gia hạn')}
 if(a=='addp'){const n=$('#ap')?.value,p=PPL.find(x=>x.n==n);if(!p)return;return act('addAssignee',{id,userId:p.id},'Đã thêm '+n)}
-if(a=='agree'){const d=D.find(x=>x.id==b.dataset.id);if(!d?.ai?.r?.k)return toast('AI chưa chọn được loại văn bản, hãy bấm Sửa thẻ');return act('confirmDoc',{docId:d.id,tag:d.ai.r.k,agency:d.ai.r.ag},null,r=>{toast(r.tasks?`Đã phân loại ${d.id}. AI đề xuất ${r.tasks} nhiệm vụ, xem ở mục Đề xuất nhiệm vụ từ AI`:'Đã phân loại '+d.id);draw()})}
-if(a=='cedit'){S.edit=b.dataset.id;return draw()}if(a=='ccancel'){S.edit=null;return draw()}
-if(a=='csave'){const k=$('#ek').value,ag=$('#ea').value;if(!k)return toast('Hãy chọn loại văn bản');return act('confirmDoc',{docId:b.dataset.id,tag:k,agency:ag},null,r=>{S.edit=null;toast(r.tasks?`Đã phân loại. AI đề xuất ${r.tasks} nhiệm vụ, xem ở mục Đề xuất nhiệm vụ từ AI`:'Đã phân loại');draw()})}
+if(a=='cfm'){const id=b.dataset.id,k=$(`[data-sel=k][data-id="${id}"]`).value,ag=$(`[data-sel=ag][data-id="${id}"]`).value;if(!k)return toast('Hãy chọn loại văn bản');if(!ag)return toast('Hãy chọn cơ quan ban hành');
+ return act('confirmDoc',{docId:id,tag:k,agency:ag},null,r=>{delete S.sel[id];toast(r.tasks?`Đã phân loại ${id}. AI đề xuất ${r.tasks} nhiệm vụ, xem ở mục Đề xuất nhiệm vụ từ AI`:'Đã phân loại '+id+' và đưa vào Kho văn bản');draw()})}
+if(a=='aren'){const g=AGS.find(x=>x.c==v),n=(prompt('Đổi tên cơ quan “'+g.n+'”',g.n)||'').trim();if(!n||n==g.n)return;return act('renameAgency',{code:v,name:n},'Đã đổi tên cơ quan')}
+if(a=='adel'){const g=AGS.find(x=>x.c==v);if(!confirm('Xóa cơ quan “'+g.n+'”? Chỉ xóa được khi chưa có văn bản nào thuộc cơ quan này. Thư mục trong Drive được giữ nguyên.'))return;return act('deleteAgency',{code:v},'Đã xóa cơ quan')}
 if(a=='runai')return runAi(b.dataset.id,true);
 if(a=='sugopen'){S.sug=b.dataset.id;S.pick=[];S.err='';scrollTo(0,0);return draw()}if(a=='sugback'){S.sug=null;S.pick=[];return draw()}
 if(a=='sugskip'){const s=SUG.find(x=>x.id==b.dataset.id);if(!confirm('Bỏ qua đề xuất “'+s.title+'”? Đề xuất sẽ biến mất khỏi danh sách.'))return;return act('skipSuggestion',{id:s.id},'Đã bỏ qua đề xuất')}
@@ -248,6 +251,7 @@ if(a=='tdel'){if(!confirm('Xóa thẻ “'+v+'”? Văn bản đang dùng thẻ 
 if(a=='del'){if(!confirm('Xóa nhiệm vụ '+id+'?\n\nToàn bộ trao đổi, lịch sử, tiến độ, kết quả nộp, gia hạn và thông báo của nhiệm vụ sẽ bị xóa khỏi Google Sheets và không thể khôi phục.\nCác tệp đã tải lên Drive (tài liệu giao, bài nhân viên nộp) được giữ nguyên.'))return;return act('deleteTask',{id},'Đã xóa '+id,()=>go('mo'))}
 draw()});
 document.addEventListener('change',e=>{const el=e.target,w=el.closest('[data-f2]'),r=el.closest('[data-f3]');
+if(el.dataset.sel){const id=el.dataset.id,k=$(`[data-sel=k][data-id="${id}"]`).value,ag=$(`[data-sel=ag][data-id="${id}"]`).value;S.sel[id]={k,ag};const sv=$('#sv-'+id);if(sv)sv.innerHTML=svp(k,ag);return}
 if(w){S.f[el.dataset.k]=el.value;draw();$('[data-f2] [data-k=q]')?.focus()}if(r){S.rf[el.dataset.k]=el.value;draw()}
 if(el.closest('[data-f4]')&&el.tagName=='SELECT'){S.kf[el.dataset.k]=el.value;return khoUpd()}
 if(el.closest('#cf')&&el.id!='ps')paintPick()});
@@ -264,7 +268,8 @@ if(k=='sub')return act('submitTask',{id,text:F.text,note:F.nt,files:fl},'Đã n�
 if(k=='ext'){if(F.to<=t.due)return toast('Thời hạn mới phải sau thời hạn hiện tại');return act('requestExt',{id,to:F.to,why:F.why},'Đã gửi đề nghị gia hạn')}
 if(k=='edit')return act('editTask',{id,title:F.title,desc:F.desc,pri:F.pri,keep:S.ef,files:fl},'Đã lưu');
 if(k=='pe')return act('updateProfile',{n:F.n,y:F.y,ad:F.ad,r:F.r,t:F.t,c:F.c},'Đã lưu hồ sơ');
-if(k=='tag')return act('addTag',{name:F.g},'Đã thêm thẻ')});
+if(k=='tag')return act('addTag',{name:F.g},'Đã thêm thẻ');
+if(k=='agency')return act('addAgency',{name:F.g},'Đã thêm cơ quan')});
 
 /* ---------- ĐĂNG NHẬP / ĐĂNG XUẤT / LÀM MỚI ---------- */
 function logout(expired){sessionStorage.removeItem('tok');try{google.accounts.id.disableAutoSelect()}catch{}

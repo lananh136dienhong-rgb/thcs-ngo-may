@@ -31,6 +31,7 @@ function conv(x) {
     if (/^\d{4}-\d{2}-\d{2}$/.test(x)) return new ctx.Date(x + 'T00:00:00+07:00');
     if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(x)) return new ctx.Date(x + '+07:00');
     if (/^'/.test(x)) return x.slice(1);
+    if (/^-?\d+(\.\d+)?$/.test(x)) return Number(x);   // Sheets tự đổi chuỗi số thành số ("03" thành 3)
   }
   return x;
 }

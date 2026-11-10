@@ -51,6 +51,7 @@ function setup() {
     Db.append('Users', { user_id: 'U001', full_name: P.getProperty('ADMIN_NAME') || 'Hiệu trưởng', email: P.getProperty('ADMIN_EMAIL').trim().toLowerCase(), birth_year: '', address: '', position: 'Hiệu trưởng', app_role: 'admin', department: 'Ban giám hiệu', campus: 'Trường chính', active: true, created_at: now_() });
   }
   if (!Db.all('DocTags').length) {
+    seedAgencies_();
     DEFAULT_TAGS.forEach(function (n, i) {
       Db.append('DocTags', { tag_id: 'TG' + String(i + 1).padStart(2, '0'), tag_name: n, active: true });
     });
@@ -113,6 +114,7 @@ function upgrade() {
     }
   });
   Db.clearAll();
+  seedAgencies_();
   // Thêm các thẻ loại văn bản mặc định còn thiếu (không xóa hay sửa thẻ đang có).
   const tags = Db.all('DocTags');
   DEFAULT_TAGS.forEach(function (n) {
