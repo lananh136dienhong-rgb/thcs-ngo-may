@@ -4,7 +4,8 @@
  */
 window.CONFIG = {
   // Địa chỉ web app Apps Script (kết thúc bằng /exec)
-  API_URL: 'https://script.google.com/macros/s/AKfycbzBFPlrnLRb7k6ZGaUuf5Tr3G7ryC_opxxkw_VSZFQSddlFVEIVmokVgmceW8G7iHIyEA/exec',
+  API_URL: 'https://script.google.com/macros/s/AKfycbztotb36zPqtbErt0cZ5lIt8bQu1_HIGEG822YpVeInMXYObHU6gfkgOMW5X9_Ab9vW8Q/exec',
+  
   // Client ID tạo trong Google Cloud Console (dạng xxxx.apps.googleusercontent.com)
   GOOGLE_CLIENT_ID: '761801522322-mbeq2l5cp6j55er0ej15c7u79qe983d5.apps.googleusercontent.com',
   // Dung lượng tối đa mỗi tệp (MB). Phải KHÔNG lớn hơn CFG.MAX_FILE_MB trong backend/Code.gs
