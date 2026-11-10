@@ -4,7 +4,13 @@
  *  checkUsers()          : kiểm tra danh sách nhân viên trong sheet Users, in lỗi ra nhật ký
  *  installWeeklyBackup() : bật sao lưu Sheet tự động mỗi tuần
  *  clearCache()          : xóa bộ nhớ đệm, chạy sau khi sửa sheet BẰNG TAY nếu muốn có hiệu lực ngay
+ *  upgrade()             : nâng cấp hệ thống đang chạy lên bản có AI (thêm cột, sheet và thẻ mới). An toàn khi chạy nhiều lần
+ *  aiSelfTest()          : kiểm tra khóa Gemini và kết quả AI đọc thử một văn bản mẫu
+ *  installAiTrigger()    : bật bộ hẹn giờ 5 phút/lần xử lý văn bản AI chưa đọc xong
+ *  purgeDeletedTasks()   : dọn dữ liệu của các nhiệm vụ đã xóa từ trước khi có bản AI
  */
+
+const DEFAULT_TAGS = ['Báo cáo', 'Chỉ thị', 'Chương trình', 'Công văn', 'Đề án', 'Hướng dẫn', 'Kế hoạch', 'Khác', 'Quyết định', 'Thông báo', 'Thông tư'];
 
 function clearCache() {
   Db.clearAll();
@@ -45,7 +51,7 @@ function setup() {
     Db.append('Users', { user_id: 'U001', full_name: P.getProperty('ADMIN_NAME') || 'Hiệu trưởng', email: P.getProperty('ADMIN_EMAIL').trim().toLowerCase(), birth_year: '', address: '', position: 'Hiệu trưởng', app_role: 'admin', department: 'Ban giám hiệu', campus: 'Trường chính', active: true, created_at: now_() });
   }
   if (!Db.all('DocTags').length) {
-    ['Công văn', 'Nghị định', 'Kế hoạch', 'Tài liệu giảng dạy', 'Hình ảnh / video'].forEach(function (n, i) {
+    DEFAULT_TAGS.forEach(function (n, i) {
       Db.append('DocTags', { tag_id: 'TG' + String(i + 1).padStart(2, '0'), tag_name: n, active: true });
     });
   }
@@ -85,4 +91,70 @@ function installWeeklyBackup() {
   ScriptApp.getProjectTriggers().filter(function (t) { return t.getHandlerFunction() === 'backup'; }).forEach(function (t) { ScriptApp.deleteTrigger(t); });
   ScriptApp.newTrigger('backup').timeBased().onWeekDay(ScriptApp.WeekDay.SUNDAY).atHour(2).create();
   Logger.log('Đã bật sao lưu mỗi Chủ nhật lúc 2 giờ sáng.');
+}
+
+// ===================== NÂNG CẤP LÊN BẢN CÓ AI =====================
+function upgrade() {
+  const ss = SpreadsheetApp.openById(prop_('SHEET_ID')), log = [];
+  Object.keys(SCHEMA).forEach(function (name) {
+    const want = SCHEMA[name];
+    let s = ss.getSheetByName(name);
+    if (!s) { s = ss.insertSheet(name); log.push('Tạo sheet ' + name); }
+    if (s.getLastRow() === 0) {
+      s.getRange(1, 1, 1, want.length).setValues([want]).setFontWeight('bold').setBackground('#0a2447').setFontColor('#ffffff');
+      s.setFrozenRows(1);
+      return;
+    }
+    const have = s.getRange(1, 1, 1, s.getLastColumn()).getValues()[0].map(String);
+    const miss = want.filter(function (c) { return have.indexOf(c) < 0; });
+    if (miss.length) {
+      s.getRange(1, have.length + 1, 1, miss.length).setValues([miss]).setFontWeight('bold').setBackground('#0a2447').setFontColor('#ffffff');
+      log.push('Sheet ' + name + ': thêm cột ' + miss.join(', '));
+    }
+  });
+  Db.clearAll();
+  // Thêm các thẻ loại văn bản mặc định còn thiếu (không xóa hay sửa thẻ đang có).
+  const tags = Db.all('DocTags');
+  DEFAULT_TAGS.forEach(function (n) {
+    const ex = tags.find(function (t) { return t.tag_name === n; });
+    if (!ex) { Db.append('DocTags', { tag_id: Db.nextId('DocTags', 'tag_id', 'TG', 2), tag_name: n, active: true }); log.push('Thêm thẻ ' + n); }
+    else if (!yes_(ex.active)) { Db.update('DocTags', ex._row, { active: true }); log.push('Bật lại thẻ ' + n); }
+  });
+  // Các văn bản cũ đã được xem xét: đánh dấu AI không áp dụng để không bị đưa vào hàng đợi.
+  Db.refresh('Documents');
+  Db.all('Documents').forEach(function (d) { if (yes_(d.reviewed) && !d.ai_status) Db.update('Documents', d._row, { ai_status: 'off' }); });
+  child_(DriveApp.getFolderById(prop_('FOLDER_VANBAN')), STAGING);
+  Logger.log(log.length ? 'Đã nâng cấp:\n' + log.join('\n') : 'Hệ thống đã ở bản mới nhất, không có gì cần thay đổi.');
+  Logger.log('Tiếp theo: đặt GEMINI_API_KEY trong Script properties, chạy aiSelfTest() rồi installAiTrigger().');
+}
+
+// Dọn dữ liệu của các nhiệm vụ đã "xóa mềm" từ bản cũ (xóa trong Sheets, KHÔNG xóa tệp trong Drive).
+function purgeDeletedTasks() {
+  Db.refresh('Tasks');
+  const gone = Db.all('Tasks').filter(function (t) { return yes_(t.is_deleted); });
+  let rows = 0;
+  gone.forEach(function (t) {
+    rows += purgeTaskData_(t.task_id);
+    Db.update('Tasks', t._row, { title: '(đã xóa)', description: '', review_comment: '', ext_pending: false });
+  });
+  Logger.log('Đã dọn ' + gone.length + ' nhiệm vụ đã xóa, xóa ' + rows + ' dòng dữ liệu liên quan trong Google Sheets. Tệp trong Drive được giữ nguyên.');
+}
+
+function installAiTrigger() {
+  ScriptApp.getProjectTriggers().filter(function (t) { return t.getHandlerFunction() === 'aiSweep'; }).forEach(function (t) { ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger('aiSweep').timeBased().everyMinutes(5).create();
+  Logger.log('Đã bật: cứ 5 phút hệ thống kiểm tra và xử lý các văn bản AI chưa đọc xong.');
+}
+
+// Chạy tay để kiểm tra Gemini: dùng một văn bản mẫu ngắn (không đụng tới dữ liệu thật, không tốn Drive).
+function aiSelfTest() {
+  if (!prop_('GEMINI_API_KEY')) throw new Error('Chưa có GEMINI_API_KEY trong Script properties.');
+  Logger.log('Mô hình: ' + (prop_('GEMINI_MODEL') || AI.MODEL));
+  const sample = 'UBND TỈNH GIA LAI\nSỞ GIÁO DỤC VÀ ĐÀO TẠO\nSố: 1234/SGDĐT-GDTrH\nGia Lai, ngày 05 tháng 11 năm 2026\nV/v tổ chức Hội thi Khoa học kỹ thuật cấp trường\nKính gửi: Các trường THCS trên địa bàn.\n'
+    + 'Thực hiện kế hoạch năm học, Sở đề nghị các trường: 1) Xây dựng kế hoạch tổ chức hội thi và gửi về Sở trước ngày 30/11/2026. 2) Báo cáo kết quả hội thi trong thời hạn 05 ngày làm việc kể từ ngày kết thúc.\nNơi nhận: Như trên; Lưu VT.';
+  const tags = aiTags_();
+  const raw = aiParse_(aiCall_(aiSystem_(tags), [{ text: 'Hôm nay là ' + today_() + '. Tên tệp: mau.txt. NỘI DUNG VĂN BẢN:\n' + sample + '\nHãy phân tích và trả về JSON.' }]));
+  const res = aiNormalize_(raw, { uploaded_at: now_(), name: 'mau.txt' }, tags);
+  Logger.log('Kết quả AI đọc thử:\n' + JSON.stringify(res, null, 2));
+  Logger.log('ĐÚNG KỲ VỌNG nếu: loại = Công văn, cơ quan = 03, có nhiệm vụ "Xây dựng kế hoạch…" với hạn gần 30/11/2026 (sớm hơn 2 ngày, lùi về ngày làm việc).');
 }

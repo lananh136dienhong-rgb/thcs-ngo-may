@@ -50,6 +50,7 @@ function mkSheet(name) {
     },
     appendRow: a => { rows.push(a.map(conv)); },
     deleteRow: n => { rows.splice(n - 1, 1); },
+    deleteRows: (n, k) => { rows.splice(n - 1, k); },
     setFrozenRows() {}, getName: () => name
   };
 }
@@ -72,10 +73,11 @@ const SpreadsheetApp = { create: () => { const b = mkBook(); books.SHEET1 = b; r
 const files = {}; let fid = 0;
 function mkFolder(name) {
   const f = {
-    name, kids: [],
+    name, kids: [], parent: null, getName: () => name,
     getFoldersByName: n => { const m = f.kids.filter(k => k.name === n); let i = 0; return { hasNext: () => i < m.length, next: () => m[i++] }; },
-    createFolder: n => { const k = mkFolder(n); k.id = 'D' + (++fid); files[k.id] = k; f.kids.push(k); return k; },
-    createFile: blob => { const id = 'F' + (++fid); files[id] = { id, blob, trashed: false, getId: () => id, getBlob: () => blob, setTrashed(v) { this.trashed = v; } }; return files[id]; },
+    getFolders: () => { let i = 0; return { hasNext: () => i < f.kids.length, next: () => f.kids[i++] }; },
+    createFolder: n => { const k = mkFolder(n); k.id = 'D' + (++fid); k.parent = f; files[k.id] = k; f.kids.push(k); return k; },
+    createFile: blob => { const id = 'F' + (++fid); files[id] = { id, blob, trashed: false, parent: f, getId: () => id, getBlob: () => blob, setTrashed(v) { this.trashed = v; }, moveTo(d) { this.parent = d; return this; } }; return files[id]; },
     getId: () => f.id, getUrl: () => 'u'
   };
   return f;
@@ -103,13 +105,21 @@ const CacheService = {
 const LockService = { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) };
 const ContentService = { createTextOutput: t => ({ t, setMimeType() { return this; } }), MimeType: { JSON: 'json' } };
 const tokenDB = {};   // token Google giả: tokenDB[token] = nội dung mà tokeninfo sẽ trả về
+// Gemini giả: gemini.reply = hàm (body, url, opts) → {code, body}; gemini.calls ghi lại các yêu cầu đã gửi
+const gemini = { calls: [], reply: null };
 const UrlFetchApp = {
-  fetch: url => {
+  fetch: (url, opts) => {
+    if (String(url).includes('generativelanguage.googleapis.com')) {
+      const body = JSON.parse(opts.payload); gemini.calls.push({ url, opts, body });
+      const r = gemini.reply(body, url, opts);
+      return { getResponseCode: () => r.code, getContentText: () => typeof r.body === 'string' ? r.body : JSON.stringify(r.body) };
+    }
     const t = decodeURIComponent(url.split('id_token=')[1]), x = tokenDB[t];
     return x ? { getResponseCode: () => 200, getContentText: () => JSON.stringify(x) } : { getResponseCode: () => 400, getContentText: () => '{}' };
   }
 };
-const ScriptApp = { getProjectTriggers: () => [], newTrigger: () => ({ timeBased: () => ({ onWeekDay: () => ({ atHour: () => ({ create() {} }) }) }) }), WeekDay: { SUNDAY: 1 } };
+const triggers = [];
+const ScriptApp = { getProjectTriggers: () => [], deleteTrigger() {}, newTrigger: fn => ({ timeBased: () => ({ onWeekDay: () => ({ atHour: () => ({ create() { triggers.push(fn); } }) }), everyMinutes: m => ({ create() { triggers.push(fn + ':' + m); } }) }) }), WeekDay: { SUNDAY: 1 } };
 const Logger = { log: (...a) => console.log('  [log]', ...a) };
 
 const RealDate = Date;
@@ -119,8 +129,8 @@ class FakeDate extends RealDate {
 }
 const ctx = { console, CacheService, PropertiesService, Utilities, SpreadsheetApp, DriveApp, LockService, ContentService, UrlFetchApp, ScriptApp, Logger, Date: FakeDate, Buffer, Error, JSON, Math, String, Number, Array, Object, parseInt, isNaN, encodeURIComponent };
 vm.createContext(ctx);
-for (const f of ['Code.gs', 'Auth.gs', 'Db.gs', 'Api.gs', 'Docs.gs', 'Setup.gs']) {
+for (const f of ['Code.gs', 'Auth.gs', 'Db.gs', 'Api.gs', 'Docs.gs', 'Ai.gs', 'Setup.gs']) {
   // const/class ở cấp cao nhất không lộ ra ngoài vm, đổi sang var để mã khác dùng được
   vm.runInContext(fs.readFileSync(DIR + f, 'utf8').replace(/^const (\w+) =/mg, 'var $1 =').replace(/^class (\w+)/mg, 'var $1 = class $1'), ctx, { filename: f });
 }
-module.exports = { ctx, props, tokenDB, stats, files, books, setClock: d => { clock = new RealDate(d); } };
+module.exports = { ctx, props, tokenDB, stats, files, books, gemini, triggers, setClock: d => { clock = new RealDate(d); } };

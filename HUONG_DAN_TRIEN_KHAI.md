@@ -27,8 +27,9 @@ thcs-ngo-may/
 │   ├─ Auth.gs              đăng nhập Google, token phiên
 │   ├─ Db.gs                lớp đọc/ghi Google Sheets + định nghĩa các cột
 │   ├─ Api.gs               nhiệm vụ: tạo, sửa, tiếp nhận, nộp, duyệt, gia hạn, thêm người, chat
-│   ├─ Docs.gs              văn bản, thẻ phân loại, hồ sơ cá nhân
-│   └─ Setup.gs             setup(), checkUsers(), sao lưu
+│   ├─ Docs.gs              văn bản, xác nhận phân loại, thẻ, hồ sơ cá nhân
+│   ├─ Ai.gs                ★ trợ lý AI Gemini: đọc văn bản, gợi ý phân loại và nhiệm vụ
+│   └─ Setup.gs             setup(), upgrade(), aiSelfTest(), installAiTrigger(), checkUsers(), sao lưu
 ├─ frontend/                ← đưa lên Cloudflare Pages
 │   ├─ index.html           khung trang + màn hình đăng nhập
 │   ├─ config.js            ★ file DUY NHẤT cần sửa: địa chỉ API + Client ID
@@ -41,7 +42,7 @@ thcs-ngo-may/
 ```
 
 **Các file liên kết với nhau thế nào**
-- `index.html` nạp theo thứ tự `config.js` → `api.js` → `app.js` (có `?v=1` để ép trình duyệt tải bản mới).
+- `index.html` nạp theo thứ tự `config.js` → `api.js` → `app.js` (có `?v=3` để ép trình duyệt tải bản mới).
 - `config.js` đặt biến `CONFIG`; `api.js` đọc `CONFIG.API_URL`; `app.js` dùng `API.call(...)` và `CONFIG`.
 - Mỗi tên hành động trong `app.js` (ví dụ `'submitTask'`) khớp một hàm trong `routes_()` ở `Api.gs` (ví dụ `apiSubmit_`).
 - `Db.gs` có danh sách cột `SCHEMA`; `Setup.gs → setup()` dùng nó để tạo các sheet đúng cột.
@@ -263,3 +264,109 @@ Khi trường phát triển (nhiều người dùng, nhiều tệp, cần chat t
 **Chỉnh số liệu trong `config.js`:** `POLL_DETAIL_MS` (chu kỳ làm mới khi đang mở nhiệm vụ), `POLL_LIST_MS` (chu kỳ làm mới trang danh sách), `NAV_REFRESH_MS` (độ cũ tối đa khi chuyển trang). Tăng các số này để giảm số lần gọi backend, đổi lại dữ liệu của người khác hiện chậm hơn.
 
 **Nếu vẫn chậm:** Apps Script có độ trễ vốn có mỗi lần gọi nên không thể nhanh bằng website dùng cơ sở dữ liệu chuyên dụng. Khi đó cân nhắc thay Google Sheets bằng Supabase hoặc Cloudflare D1 (giữ nguyên giao diện, thay `Db.gs` và `saveDrive_`).
+
+## 14. Trợ lý AI (Gemini): đọc văn bản, gợi ý phân loại và nhiệm vụ
+
+### 14.1 AI làm gì
+1. Hiệu trưởng (hoặc nhân viên) **tải văn bản** lên website. Tệp nằm ở thư mục tạm `VanBan/_Cho_xac_nhan` trong Drive.
+2. **Gemini đọc** văn bản và gợi ý: loại văn bản, cơ quan ban hành, số ký hiệu, trích yếu và các việc nhà trường phải làm (tên, nội dung, hạn).
+3. Ở mục **Tải văn bản**, Hiệu trưởng bấm **Đồng ý phân loại** hoặc **Sửa thẻ**. Chỉ lúc này tệp mới được chuyển vào thư mục `VanBan/<cơ quan>/<loại>` và hiện trong **Kho văn bản**.
+4. Các việc AI tìm thấy xuất hiện ở mục **Đề xuất nhiệm vụ từ AI**. Hiệu trưởng xem lại, chọn người được giao và bổ sung rồi mới giao. AI chỉ điền tên, nội dung, thời hạn.
+
+AI chỉ **gợi ý**. Không có thao tác thật nào (đưa tệp vào thư mục, tạo nhiệm vụ) xảy ra khi chưa có người bấm xác nhận.
+
+**Cách tính hạn:** nếu văn bản nêu ngày cụ thể, hạn nội bộ sớm hơn 2 ngày (lùi về ngày làm việc). Nếu nêu hạn kiểu "trong 05 ngày làm việc kể từ ngày nhận", **chương trình** tự cộng ngày (bỏ thứ Bảy, Chủ nhật; chưa trừ ngày lễ), không để AI tự tính. Không có hạn hoặc hạn đã qua thì để trống. Mỗi đề xuất có dòng giải thích cách tính. Muốn đổi số ngày sớm hơn, sửa `BUFFER_DAYS` trong `Ai.gs`.
+
+### 14.2 Chi phí và quyền riêng tư
+- Dùng **Gemini API bản trả phí (bật thanh toán)**. Ở bản trả phí, Google nêu rõ dữ liệu gửi qua API không dùng để huấn luyện mô hình. Bản miễn phí thì có thể bị dùng, **không dùng bản miễn phí cho văn bản của trường**.
+- Chi phí mô hình "flash" rất thấp: một văn bản vài trang thường chỉ vài trăm đồng. Hãy đặt **ngân sách hằng tháng** trong Google Cloud (mục 14.3, bước 5).
+- Văn bản có dấu **Mật / Tối mật / Tuyệt mật**: không nên tải lên hệ thống này. Nếu lỡ tải, AI không gợi ý nhiệm vụ cho văn bản đó, nhưng nội dung vẫn đã gửi tới Google.
+- Chỉ Hiệu trưởng thấy kết quả AI. Nhân viên chỉ thấy văn bản của mình đang "chờ phân loại".
+
+### 14.3 Triển khai từng bước
+
+**Bước 1. Cập nhật mã nguồn trong máy** (phần này đã được cập nhật sẵn trong thư mục dự án). Kiểm tra bằng:
+
+    cd kiem-thu
+    node run.js        (kết quả cuối: 0 lỗi)
+
+**Bước 2. Đẩy giao diện lên GitHub** (Cloudflare tự cập nhật sau 1 đến 2 phút):
+
+    git add -A
+    git commit -m "Them tro ly AI Gemini"
+    git push origin master
+
+**Bước 3. Cập nhật backend trong Apps Script** (làm TRƯỚC khi mở website bản mới, hoặc ngay sau; ít nhất phải làm xong trước khi dùng):
+1. Mở dự án Apps Script. Dán lại **toàn bộ** các file: `Code.gs`, `Db.gs`, `Api.gs`, `Docs.gs`, `Setup.gs`. **Tạo file mới `Ai.gs`** (dấu + cạnh "Files" → Script) và dán nội dung `backend/Ai.gs`. `Auth.gs` và `appsscript.json` không đổi.
+2. Nhấn **Lưu**. Chọn hàm **`upgrade`** → **Chạy**. Hàm này thêm các cột/sheet còn thiếu (`AiSuggestions`, `AiFeedback`, các cột `ai_*` của `Documents`, cột `src_doc` của `Tasks`), thêm 11 thẻ loại văn bản mặc định còn thiếu và tạo thư mục `_Cho_xac_nhan`. Chạy lại nhiều lần vẫn an toàn.
+3. Lần chạy đầu Google hỏi cấp quyền thêm (kết nối dịch vụ bên ngoài để gọi Gemini): chọn **Review permissions → Allow**. Nếu thấy "chưa xác minh", chọn Advanced → Go to ... (unsafe) → Allow (vì đây là dự án của chính bạn).
+
+**Bước 4. Tạo khóa Gemini API**
+1. Vào https://aistudio.google.com bằng tài khoản Google của trường, chọn **Get API key → Create API key**. Nên tạo trong một dự án Google Cloud riêng cho nhà trường.
+2. Bật **thanh toán** cho dự án đó (Billing, gắn thẻ thanh toán). Đây là điều kiện để dùng bản trả phí.
+3. Sao chép khóa (bắt đầu bằng `AIza...`). **Không gửi khóa qua tin nhắn, email hay dán vào mã nguồn.**
+
+**Bước 5. Đặt ngân sách**: Google Cloud Console → Billing → Budgets & alerts → tạo ngân sách (ví dụ 100.000 đ/tháng) kèm cảnh báo email ở 50% và 90%. Đồng thời có thể đặt hạn mức yêu cầu (quota) thấp cho Gemini API.
+
+**Bước 6. Nhập cấu hình vào Apps Script**: Project Settings (bánh răng) → **Script properties** → Add:
+
+| Tên | Giá trị | Ghi chú |
+|---|---|---|
+| `GEMINI_API_KEY` | khóa `AIza...` | **Bắt buộc** để bật AI |
+| `GEMINI_MODEL` | tùy chọn | Mặc định `gemini-3.6-flash`. Muốn rẻ hơn: `gemini-3.5-flash-lite`. Tên mô hình do Google đổi theo thời gian, xem danh sách tại ai.google.dev, thấy báo lỗi 404 thì đổi tên này, không cần sửa mã |
+| `AI_ENABLED` | `false` | Chỉ dùng khi muốn **tắt tạm** AI (xóa dòng này để bật lại) |
+| `AI_GUIDE` | tùy chọn | Vài đoạn nói về cách Hiệu trưởng phân loại và giao việc (xem 14.5) |
+| `FOLDER_VANBAN` | tùy chọn | Mã thư mục Drive để lưu văn bản. Chỉ đổi khi muốn dùng kho văn bản **có sẵn** của Hiệu trưởng (xem 14.4) |
+
+**Bước 7. Chạy thử AI**: chọn hàm **`aiSelfTest`** → Chạy → xem **Nhật ký thực thi**. Kết quả đúng: loại `Công văn`, cơ quan `03`, có 2 nhiệm vụ và hạn gần 30/11/2026 (sớm hơn 2 ngày, lùi về ngày làm việc). Nếu lỗi, xem 14.6.
+
+**Bước 8. Bật bộ hẹn giờ dự phòng**: chạy hàm **`installAiTrigger`**. Cứ 5 phút hệ thống tự xử lý các văn bản AI chưa đọc xong (ví dụ người dùng đóng trang sớm hoặc Gemini báo bận).
+
+**Bước 9. Triển khai phiên bản mới**: **Deploy → Manage deployments → biểu tượng bút chì → Version: New version → Deploy**. Địa chỉ `/exec` giữ nguyên nên không cần sửa `config.js`.
+
+**Bước 10. Dọn nhiệm vụ đã xóa từ trước (không bắt buộc)**: chạy hàm **`purgeDeletedTasks`**. Hàm xóa chat, lịch sử... của các nhiệm vụ đã "xóa" trước đây, chỉ trong Google Sheets, không đụng tới Drive.
+
+**Bước 11. Thử trên website** (mở bằng Ctrl+F5, đăng nhập bằng tài khoản Hiệu trưởng):
+1. **Tải văn bản** → chọn một công văn thật (không mật) → Tải lên → sau 10 đến 30 giây dòng văn bản hiện gợi ý AI.
+2. Bấm **Đồng ý phân loại** (hoặc **Sửa thẻ** rồi **Lưu phân loại**) → vào Drive kiểm tra tệp đã nằm đúng thư mục `<cơ quan>/<loại>` → mục **Kho văn bản** có văn bản.
+3. **Đề xuất nhiệm vụ từ AI** → Xem và giao việc → chọn người → Giao. Mở nhiệm vụ: có dòng **Văn bản nguồn** và nút **Tìm trong kho**.
+4. Đăng nhập bằng tài khoản nhân viên: **Kho văn bản** có bộ lọc mã, tên, loại, cơ quan; thử tải một văn bản lên và xem dòng "chờ phân loại".
+5. Xóa một nhiệm vụ thử: kiểm tra các sheet `Messages`, `History`, `Submissions`... không còn dòng của nhiệm vụ đó, còn tệp trong Drive vẫn nguyên.
+
+### 14.4 Kho văn bản có sẵn trên Drive của Hiệu trưởng
+Hiệu trưởng đang có các thư mục `01_BO_GIAO_DUC_VA_DAO_TAO` ... `09_CHO_PHAN_LOAI`. Hệ thống nhận ra thư mục cơ quan theo **hai chữ số đầu** (01 đến 09) nên dùng được thư mục có sẵn; bên trong tự tạo/dùng thư mục loại (`Cong_van`, `Quyet_dinh`...). Để dùng kho có sẵn:
+1. Mở thư mục chứa 9 thư mục đó trong Drive, sao chép mã ở cuối địa chỉ (`.../folders/<MÃ>`).
+2. Đặt Script property `FOLDER_VANBAN` = mã đó. Tài khoản chạy Apps Script phải có quyền **chỉnh sửa** thư mục.
+3. Văn bản cũ đã nằm sẵn trong kho vẫn ở nguyên chỗ; hệ thống chỉ quản lý văn bản tải qua website.
+Nếu thư mục cơ quan chưa có, hệ thống tự tạo theo tên chuẩn (xem `AGENCIES` trong `Code.gs`).
+
+### 14.5 Giúp AI phân loại đúng hơn
+- **Tự học từ sửa của Hiệu trưởng:** mỗi lần bạn sửa gợi ý của AI, hệ thống ghi vào sheet `AiFeedback`; 8 lần sửa gần nhất được đưa vào lời nhắc ở các văn bản sau.
+- **`AI_GUIDE`:** có thể nhờ ChatGPT tóm tắt cách phân loại/giao việc của Hiệu trưởng thành vài đoạn ngắn (ví dụ "Công văn của Sở về thi đua luôn giao Tổ trưởng; văn bản về tài chính chỉ để biết") rồi dán vào đây (tối đa khoảng 6.000 ký tự).
+- Danh sách thẻ do Hiệu trưởng quản lý ở trang **Tải văn bản** (cuối trang). AI chỉ chọn trong các thẻ đang có. Thẻ cũ không dùng (Nghị định, Tài liệu giảng dạy, Hình ảnh / video) có thể xóa nếu không cần.
+- Tệp hỗ trợ đọc: PDF, ảnh (PNG/JPG), DOCX, XLSX, PPTX, TXT, CSV. Tệp khác (ví dụ MP4) cần phân loại thủ công. PDF scan (ảnh chụp) vẫn đọc được vì Gemini đọc trực tiếp tệp.
+
+### 14.6 Xử lý sự cố AI
+| Hiện tượng | Nguyên nhân thường gặp | Cách xử lý |
+|---|---|---|
+| Dòng văn bản ghi "AI đang tắt" | Chưa có `GEMINI_API_KEY` hoặc `AI_ENABLED=false` | Kiểm tra Script properties; chạy `aiSelfTest` |
+| "Gemini báo lỗi 400" kèm "API key" | Khóa sai | Tạo lại khóa, dán lại |
+| "Gemini báo lỗi 404" | Tên mô hình đã đổi | Đặt `GEMINI_MODEL` theo tên mới trong tài liệu Gemini |
+| "Gemini đang giới hạn tần suất" (429) | Hết hạn mức / chưa bật thanh toán | Kiểm tra Billing và quota; hệ thống tự thử lại |
+| "AI không đọc được" (failed) | Lỗi tạm thời 3 lần liên tiếp | Bấm **Chạy AI**, hoặc **Sửa thẻ** để phân loại thủ công |
+| "Hệ thống đang bận" | Nhiều người thao tác cùng lúc | Thử lại sau vài giây |
+| Không có nhiệm vụ nào được gợi ý | Văn bản chỉ để biết, hoặc là văn bản Mật | Bình thường |
+| Sai loại/cơ quan | AI không chắc (độ tin cậy thấp được ghi chú "nên kiểm tra kỹ") | Bấm **Sửa thẻ**; hệ thống ghi nhớ để lần sau tốt hơn |
+
+Xem lỗi chi tiết: Apps Script → **Executions** (Nhật ký thực thi).
+
+### 14.7 Xóa nhiệm vụ: dữ liệu nào mất, dữ liệu nào giữ
+- **Xóa trong Google Sheets:** người được giao, danh sách tệp, kết quả nộp, báo cáo tiến độ, gia hạn, tin nhắn, lịch sử, thông báo của nhiệm vụ.
+- **Giữ nguyên trong Drive:** tài liệu giao và mọi tệp nhân viên đã nộp (thư mục `TaiLieuGiao/<mã>` và `NopBai/<mã>`). Muốn dọn Drive, hãy xóa thủ công khi cần.
+- **Dòng trong sheet `Tasks`** chỉ còn mã nhiệm vụ (tên và nội dung bị xóa, đánh dấu đã xóa) để **mã không bao giờ cấp lại**; nếu cấp lại, tệp của nhiệm vụ mới sẽ lẫn vào thư mục Drive của nhiệm vụ cũ. Mỗi dòng như vậy rất nhỏ.
+- Thao tác **không thể khôi phục** (ngoài bản sao lưu hằng tuần của Sheet).
+- Nếu xóa **văn bản**, tệp được chuyển vào thùng rác Drive; các nhiệm vụ đã tạo từ văn bản đó vẫn còn và ghi "văn bản đã bị xóa khỏi kho".
+
+### 14.8 Quay lại nếu có sự cố
+- Tắt AI ngay: đặt `AI_ENABLED` = `false`. Website vẫn chạy, mọi văn bản phân loại thủ công.
+- Quay về bản cũ: Apps Script → Deploy → Manage deployments → chọn phiên bản cũ. Các cột và sheet mới thêm vào không làm hỏng bản cũ.

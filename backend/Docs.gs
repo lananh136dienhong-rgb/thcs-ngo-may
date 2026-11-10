@@ -7,35 +7,72 @@ function apiUploadDoc_(u, r) {
   if (Db.all('Documents').some(function (d) { return !yes_(d.is_deleted) && d.name === fl.name && Number(d.size_bytes) === size; })) {
     throw new AppError('Văn bản này đã tồn tại (trùng tên và dung lượng). Hãy chọn tệp khác.', 'BAD');
   }
-  const year = today_().slice(0, 4), id = Db.nextId('Documents', 'doc_id', 'VB-' + year + '-', 3), at = now_(), admin = isAdmin_(u);
-  const driveId = saveDrive_('FOLDER_VANBAN', '', fl, id + '_');
-  Db.append('Documents', { doc_id: id, name: fl.name, drive_file_id: driveId, size_bytes: size, uploaded_by: u.user_id, uploaded_at: at, tag: '', reviewed: admin, reviewed_at: admin ? at : '', is_deleted: false });
-  if (!admin) notify_('ADMIN', u.full_name + ' đã tải lên văn bản ' + id, '');
-  return { id: id };
+  const year = today_().slice(0, 4), id = Db.nextId('Documents', 'doc_id', 'VB-' + year + '-', 3), at = now_();
+  // Tệp nằm ở thư mục tạm cho tới khi Hiệu trưởng xác nhận phân loại (confirmDoc) thì mới chuyển vào thư mục chính thức.
+  const driveId = saveDrive_('FOLDER_VANBAN', STAGING, fl, id + '_');
+  Db.append('Documents', { doc_id: id, name: fl.name, drive_file_id: driveId, size_bytes: size, uploaded_by: u.user_id, uploaded_at: at, tag: '', reviewed: false, reviewed_at: '', is_deleted: false, agency: '', doc_no: '', summary: '', ai_status: aiEnabled_() ? 'queued' : 'off', ai_tries: 0, ai_at: '', ai_error: '', ai_result: '' });
+  if (!isAdmin_(u)) notify_('ADMIN', u.full_name + ' đã tải lên văn bản ' + id + ' (chờ phân loại)', '');
+  return { id: id, ai: aiEnabled_() };
 }
 function doc_(id) {
   const d = Db.all('Documents').find(function (x) { return x.doc_id === String(id) && !yes_(x.is_deleted); });
   if (!d) throw new AppError('Không tìm thấy văn bản', 'NOTFOUND');
   return d;
 }
-function apiSetDocTag_(u, r) {
+function agency_(code) {
+  const a = AGENCIES.find(function (x) { return x.code === String(code); });
+  if (!a) throw new AppError('Cơ quan ban hành không hợp lệ', 'BAD');
+  return a;
+}
+// Thư mục con theo tên; thư mục cơ quan khớp theo mã đầu tên ("03_..."), nhờ vậy dùng được cả thư mục có sẵn của Hiệu trưởng.
+function agencyFolder_(root, ag) {
+  const it = root.getFolders();
+  while (it.hasNext()) {
+    const f = it.next();
+    if (new RegExp('^' + ag.code + '(?![0-9])').test(String(f.getName()).trim())) return f;
+  }
+  return root.createFolder(ag.folder);
+}
+function fileDoc_(d, ag, tag) {
+  const root = DriveApp.getFolderById(prop_('FOLDER_VANBAN')), dest = child_(agencyFolder_(root, ag), TYPE_FOLDERS[tag] || slug_(tag));
+  DriveApp.getFileById(d.drive_file_id).moveTo(dest);
+}
+// Hiệu trưởng đồng ý (hoặc sửa) phân loại: tệp được chuyển vào thư mục, các nhiệm vụ AI gợi ý được đưa vào danh sách chờ duyệt.
+function apiConfirmDoc_(u, r) {
   admin_(u);
-  const d = doc_(r.docId), tag = String(r.tag || '');
-  if (tag && !Db.all('DocTags').some(function (t) { return yes_(t.active) && t.tag_name === tag; })) throw new AppError('Thẻ phân loại không tồn tại', 'BAD');
-  Db.update('Documents', d._row, { tag: tag, reviewed: true, reviewed_at: d.reviewed_at || now_() });
-  return true;
+  const d = doc_(r.docId), tag = String(r.tag || ''), ag = agency_(r.agency);
+  if (yes_(d.reviewed)) throw new AppError('Văn bản này đã được phân loại rồi', 'BAD');
+  if (!Db.all('DocTags').some(function (t) { return yes_(t.active) && t.tag_name === tag; })) throw new AppError('Hãy chọn loại văn bản', 'BAD');
+  if (d.ai_status === 'reading' && minutesSince_(d.ai_at) <= AI.STALE_MIN) throw new AppError('AI đang đọc văn bản này, vui lòng chờ vài giây rồi thử lại', 'BAD');
+  const a = aiResult_(d), at = now_();
+  try { fileDoc_(d, ag, tag); }
+  catch (e) { console.error(e); throw new AppError('Không chuyển được tệp vào thư mục Drive. Hãy kiểm tra quyền của thư mục văn bản.', 'SERVER'); }
+  if (a && (a.k !== tag || a.ag !== ag.code)) {
+    Db.append('AiFeedback', { fb_id: Db.nextId('AiFeedback', 'fb_id', 'FB', 4), doc_name: d.name, ai_tag: a.k, ai_agency: a.ag, final_tag: tag, final_agency: ag.code, at: at });
+  }
+  Db.update('Documents', d._row, { tag: tag, agency: ag.code, doc_no: a ? a.num : '', summary: a ? a.sum : '', reviewed: true, reviewed_at: at, ai_result: '' });
+  let n = 0;
+  if (a && !a.mat) {
+    (a.tasks || []).forEach(function (t) {
+      Db.append('AiSuggestions', { sug_id: Db.nextId('AiSuggestions', 'sug_id', 'DX-', 4), doc_id: d.doc_id, title: t.title, description: t.desc, due_date: t.due, source_text: t.src, how: t.how, status: 'pending', task_id: '', created_at: at });
+      n++;
+    });
+  }
+  if (d.uploaded_by !== u.user_id) notify_(d.uploaded_by, 'Văn bản ' + d.doc_id + ' đã được phân loại vào kho văn bản', '');
+  return { tasks: n };
 }
 function apiDeleteDoc_(u, r) {
   admin_(u);
   const d = doc_(r.docId);
   Db.update('Documents', d._row, { is_deleted: true });
+  Db.all('AiSuggestions').filter(function (x) { return x.doc_id === d.doc_id && x.status === 'pending'; }).forEach(function (x) { Db.update('AiSuggestions', x._row, { status: 'skipped' }); });
   try { DriveApp.getFileById(d.drive_file_id).setTrashed(true); } catch (e) { console.error(e); }
   return true;
 }
-// Staff và leader chỉ tải được văn bản đã được Hiệu trưởng xem xét.
+// Staff và leader chỉ tải được văn bản đã phân loại (hoặc do chính mình tải lên).
 function apiDownloadDoc_(u, r) {
   const d = doc_(r.docId);
-  if (!isAdmin_(u) && !yes_(d.reviewed)) throw new AppError('Văn bản này chưa được Hiệu trưởng xem xét', 'FORBIDDEN');
+  if (!isAdmin_(u) && !yes_(d.reviewed) && d.uploaded_by !== u.user_id) throw new AppError('Văn bản này chưa được Hiệu trưởng phân loại', 'FORBIDDEN');
   const b = b64_(d.drive_file_id);
   return { name: d.name, mime: b.mime, data: b.data };
 }
