@@ -6,6 +6,7 @@ const SCHEMA = {
   Users: ['user_id', 'full_name', 'email', 'birth_year', 'address', 'position', 'app_role', 'department', 'campus', 'active', 'created_at'],
   Tasks: ['task_id', 'title', 'description', 'priority', 'campus', 'department', 'target_type', 'due_date', 'status', 'created_by', 'created_at', 'updated_at', 'review_comment', 'ext_pending', 'is_deleted', 'src_doc'],
   TaskAssignees: ['row_id', 'task_id', 'user_id', 'accepted_at', 'added_by', 'added_at'],
+  TaskDocs: ['row_id', 'task_id', 'doc_id', 'added_by', 'added_at'],
   TaskFiles: ['file_id', 'task_id', 'kind', 'name', 'drive_file_id', 'uploaded_by', 'uploaded_at'],
   Submissions: ['sub_id', 'task_id', 'submitted_by', 'content', 'note', 'submitted_at', 'result', 'reviewer_comment'],
   ProgressReports: ['report_id', 'task_id', 'user_id', 'done', 'result', 'remaining', 'reported_at'],

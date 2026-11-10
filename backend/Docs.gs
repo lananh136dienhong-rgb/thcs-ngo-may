@@ -2,17 +2,49 @@
  * Docs.gs – VĂN BẢN, THẺ PHÂN LOẠI, HỒ SƠ CÁ NHÂN
  */
 
+// Tải lên nhanh: tệp được ghi vào Drive TRƯỚC và NGOÀI khóa (đây là bước chậm nhất); khóa chỉ giữ trong lúc cấp mã và ghi một dòng vào Sheets.
+// Sau đó trả về luôn dòng văn bản mới, website không phải tải lại toàn bộ dữ liệu.
+function stagingDir_() {
+  const c = CacheService.getScriptCache();
+  const cached = c.get('stg');
+  if (cached) { try { return DriveApp.getFolderById(cached); } catch (e) { /* thư mục đã đổi, tìm lại */ } }
+  const dir = child_(DriveApp.getFolderById(prop_('FOLDER_VANBAN')), STAGING);
+  try { c.put('stg', dir.getId(), 21600); } catch (e) { console.error(e); }
+  return dir;
+}
+// Mã văn bản chỉ tăng, không bao giờ cấp lại mã của văn bản đã xóa (nếu cấp lại, AI đang đọc văn bản cũ có thể ghi nhầm kết quả vào văn bản mới).
+function nextDocId_() {
+  const prefix = 'VB-' + today_().slice(0, 4) + '-', key = 'DOCSEQ_' + prefix.slice(3, 7);
+  const fromRows = parseInt(Db.nextId('Documents', 'doc_id', prefix, 3).slice(prefix.length), 10);
+  const n = Math.max(fromRows, Number(prop_(key) || 0) + 1);
+  PropertiesService.getScriptProperties().setProperty(key, String(n));
+  return prefix + String(n).padStart(3, '0');
+}
+function docDup_(name, size) {
+  return Db.all('Documents').some(function (d) { return !yes_(d.is_deleted) && d.name === name && Number(d.size_bytes) === size; });
+}
 function apiUploadDoc_(u, r) {
   const fl = files_([r])[0], size = fl.bytes.length;
-  if (Db.all('Documents').some(function (d) { return !yes_(d.is_deleted) && d.name === fl.name && Number(d.size_bytes) === size; })) {
-    throw new AppError('Văn bản này đã tồn tại (trùng tên và dung lượng). Hãy chọn tệp khác.', 'BAD');
-  }
-  const year = today_().slice(0, 4), id = Db.nextId('Documents', 'doc_id', 'VB-' + year + '-', 3), at = now_();
+  const dupMsg = 'Văn bản này đã tồn tại (trùng tên và dung lượng). Hãy chọn tệp khác.';
+  if (docDup_(fl.name, size)) throw new AppError(dupMsg, 'BAD');
   // Tệp nằm ở thư mục tạm cho tới khi Hiệu trưởng xác nhận phân loại (confirmDoc) thì mới chuyển vào thư mục chính thức.
-  const driveId = saveDrive_('FOLDER_VANBAN', STAGING, fl, id + '_');
-  Db.append('Documents', { doc_id: id, name: fl.name, drive_file_id: driveId, size_bytes: size, uploaded_by: u.user_id, uploaded_at: at, tag: '', reviewed: false, reviewed_at: '', is_deleted: false, agency: '', doc_no: '', summary: '', ai_status: aiEnabled_() ? 'queued' : 'off', ai_tries: 0, ai_at: '', ai_error: '', ai_result: '' });
+  const file = stagingDir_().createFile(Utilities.newBlob(fl.bytes, fl.mime, 'tmp_' + slug_(fl.name)));
+  let id;
+  try {
+    withLock_(function () {
+      Db.refresh('Documents');
+      if (docDup_(fl.name, size)) throw new AppError(dupMsg, 'BAD');
+      id = nextDocId_();
+      Db.append('Documents', { doc_id: id, name: fl.name, drive_file_id: file.getId(), size_bytes: size, uploaded_by: u.user_id, uploaded_at: now_(), tag: '', reviewed: false, reviewed_at: '', is_deleted: false, agency: '', doc_no: '', summary: '', ai_status: aiEnabled_() ? 'queued' : 'off', ai_tries: 0, ai_at: '', ai_error: '', ai_result: '' });
+    });
+  } catch (e) {
+    try { file.setTrashed(true); } catch (x) { console.error(x); }
+    throw e;
+  }
+  try { file.setName(id + '_' + slug_(fl.name)); } catch (e) { console.error(e); }
   if (!isAdmin_(u)) notify_('ADMIN', u.full_name + ' đã tải lên văn bản ' + id + ' (chờ phân loại)', '');
-  return { id: id, ai: aiEnabled_() };
+  const row = Db.all('Documents').find(function (d) { return d.doc_id === id; });
+  return { id: id, ai: aiEnabled_(), doc: row ? docView_(row, isAdmin_(u), userNames_(), u) : null };
 }
 function doc_(id) {
   const d = Db.all('Documents').find(function (x) { return x.doc_id === String(id) && !yes_(x.is_deleted); });
@@ -101,12 +133,22 @@ function apiConfirmDoc_(u, r) {
   if (d.uploaded_by !== u.user_id) notify_(d.uploaded_by, 'Văn bản ' + d.doc_id + ' đã được phân loại vào kho văn bản', '');
   return { tasks: n };
 }
+// Xóa văn bản: xóa HẲN mọi dữ liệu của văn bản trong Google Sheets (dòng văn bản, đề xuất AI, liên kết tài liệu của nhiệm vụ,
+// thông báo, ghi nhận sửa phân loại) và chuyển tệp trong Drive vào thùng rác (Drive tự xóa vĩnh viễn sau 30 ngày, có thể khôi phục trước đó).
+// Nhiệm vụ đã tạo từ văn bản này vẫn giữ nguyên, chỉ gỡ liên kết tới văn bản.
+function wipeDoc_(d) {
+  const id = d.doc_id, idRe = new RegExp(id.replace(/[-]/g, '\\-') + '(?!\\d)');
+  try { DriveApp.getFileById(d.drive_file_id).setTrashed(true); } catch (e) { console.error(e); }
+  Db.removeWhere('AiSuggestions', function (x) { return x.doc_id === id; });
+  Db.removeWhere('TaskDocs', function (x) { return x.doc_id === id; });
+  Db.removeWhere('Notifications', function (x) { return idRe.test(String(x.text)); });
+  Db.removeWhere('AiFeedback', function (x) { return x.doc_name === d.name; });
+  Db.all('Tasks').filter(function (t) { return t.src_doc === id; }).forEach(function (t) { Db.update('Tasks', t._row, { src_doc: '' }); });
+  Db.removeWhere('Documents', function (x) { return x.doc_id === id; });
+}
 function apiDeleteDoc_(u, r) {
   admin_(u);
-  const d = doc_(r.docId);
-  Db.update('Documents', d._row, { is_deleted: true });
-  Db.all('AiSuggestions').filter(function (x) { return x.doc_id === d.doc_id && x.status === 'pending'; }).forEach(function (x) { Db.update('AiSuggestions', x._row, { status: 'skipped' }); });
-  try { DriveApp.getFileById(d.drive_file_id).setTrashed(true); } catch (e) { console.error(e); }
+  wipeDoc_(doc_(r.docId));
   return true;
 }
 // Staff và leader chỉ tải được văn bản đã phân loại (hoặc do chính mình tải lên).

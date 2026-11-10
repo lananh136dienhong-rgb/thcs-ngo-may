@@ -370,3 +370,18 @@ Xem lỗi chi tiết: Apps Script → **Executions** (Nhật ký thực thi).
 ### 14.8 Quay lại nếu có sự cố
 - Tắt AI ngay: đặt `AI_ENABLED` = `false`. Website vẫn chạy, mọi văn bản phân loại thủ công.
 - Quay về bản cũ: Apps Script → Deploy → Manage deployments → chọn phiên bản cũ. Các cột và sheet mới thêm vào không làm hỏng bản cũ.
+
+### 14.9 Bản ai-6: tài liệu từ kho, xóa văn bản hoàn toàn, tải lên nhanh hơn
+
+1. Dán lại các file `.gs` đã đổi (Api.gs, Code.gs, Db.gs, Docs.gs, Setup.gs), chạy hàm `upgrade` một lần (tạo sheet `TaskDocs`), rồi **Deploy → Manage deployments → bút chì → New version**. Mở địa chỉ `/exec` phải thấy `ai-6`.
+2. Giao hoặc sửa nhiệm vụ: ngoài việc tải tệp lên, ô “Hoặc đính kèm văn bản có sẵn trong Kho văn bản” cho tìm theo mã, tên, số ký hiệu và chọn nhiều văn bản (tối đa 10, chỉ văn bản đã phân loại). Người được giao thấy và tải được các văn bản này ở chi tiết nhiệm vụ.
+3. Xóa văn bản trong kho: xóa hẳn dòng trong Google Sheets (văn bản, đề xuất AI, liên kết với nhiệm vụ, thông báo, ghi nhận sửa phân loại) và chuyển tệp trong Drive vào thùng rác (khôi phục được 30 ngày). Nhiệm vụ đã giao từ văn bản đó vẫn còn, chỉ mất liên kết. Mã văn bản đã xóa không được cấp lại.
+4. Các văn bản đã xóa từ bản cũ (chỉ bị đánh dấu): chạy hàm `purgeDeletedDocs` một lần để xóa hẳn.
+5. Tải lên nhanh hơn: tệp được ghi vào Drive ngoài khóa, hệ thống không còn tải lại toàn bộ dữ liệu sau mỗi lần tải lên, trình duyệt đọc tệp bằng cách nhanh hơn. Thời gian còn lại chủ yếu là đường truyền (tệp gửi dạng base64 nên nặng hơn tệp gốc khoảng 1/3) và Apps Script ghi vào Drive.
+
+### 14.10 Bản ai-7: tự dọn dữ liệu cho nhẹ
+
+- Bấm “Bỏ qua” một đề xuất AI: dòng đó bị xóa luôn khỏi sheet `AiSuggestions`.
+- Thông báo quá 30 ngày bị xóa hẳn khỏi sheet `Notifications`.
+- Chạy hàm `installCleanupTrigger` một lần để mỗi ngày (khoảng 2 giờ sáng) hệ thống tự dọn. Hàm `dailyCleanup` chạy tay được, và cũng dọn luôn các đề xuất “skipped” còn sót từ bản cũ.
+- Triển khai: dán lại `Ai.gs`, `Code.gs`, `Setup.gs`, New version, `/exec` phải thấy `ai-7`.

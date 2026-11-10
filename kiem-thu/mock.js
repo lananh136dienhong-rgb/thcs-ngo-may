@@ -20,7 +20,7 @@ const Utilities = {
   base64DecodeWebSafe: s => [...Buffer.from(s, 'base64url')],
   getUuid: () => crypto.randomUUID(),
   computeHmacSha256Signature: (v, k) => [...crypto.createHmac('sha256', k).update(v).digest()],
-  newBlob: (b, mime, name) => ({ bytes: b, mime, name, getDataAsString: () => Buffer.from(b).toString('utf8'), getBytes: () => b, getContentType: () => mime, getName: () => name })
+  newBlob: (b, mime, name) => ({ bytes: b, mime, name, getDataAsString: () => Buffer.from(b).toString('utf8'), getBytes: () => b, getContentType: () => mime, getName: () => name, setName(n) { this.name = n; return this; } })
 };
 
 // ---- Google Sheets giả lập (đếm số lần đọc trong stats.reads) ----
@@ -78,7 +78,7 @@ function mkFolder(name) {
     getFoldersByName: n => { const m = f.kids.filter(k => k.name === n); let i = 0; return { hasNext: () => i < m.length, next: () => m[i++] }; },
     getFolders: () => { let i = 0; return { hasNext: () => i < f.kids.length, next: () => f.kids[i++] }; },
     createFolder: n => { const k = mkFolder(n); k.id = 'D' + (++fid); k.parent = f; files[k.id] = k; f.kids.push(k); return k; },
-    createFile: blob => { const id = 'F' + (++fid); files[id] = { id, blob, trashed: false, parent: f, getId: () => id, getBlob: () => blob, setTrashed(v) { this.trashed = v; }, moveTo(d) { this.parent = d; return this; } }; return files[id]; },
+    createFile: blob => { const id = 'F' + (++fid); files[id] = { id, blob, trashed: false, parent: f, getId: () => id, getBlob: () => blob, setTrashed(v) { this.trashed = v; }, setName(n) { this.blob.setName(n); return this; }, moveTo(d) { this.parent = d; return this; } }; return files[id]; },
     getId: () => f.id, getUrl: () => 'u'
   };
   return f;

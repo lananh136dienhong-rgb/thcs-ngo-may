@@ -189,9 +189,9 @@ t=call('bootstrap',T.lan).data.tasks.find(x=>x.id==NVA);ok(t&&t.src&&t.src.id==D
 ok(call('bootstrap',T.admin).data.sug.length==4,'đề xuất đã duyệt biến mất khỏi danh sách');
 ok(!call('approveSuggestion',T.admin,{id:by('Xây dựng kế hoạch hội thi').id,title:'x',due:'2026-11-27',assignees:[ids('Bùi Thị Lan')]}).ok,'không duyệt hai lần');
 r=call('approveSuggestion',T.admin,{id:by('Việc gấp').id,title:'Việc gấp',due:'2026-10-30',assignees:[]});ok(!r.ok&&call('bootstrap',T.admin).data.sug.some(x=>x.title=='Việc gấp'),'thiếu người được giao → báo lỗi, đề xuất vẫn còn');
-ok(call('skipSuggestion',T.admin,{id:by('Việc đã quá hạn').id}).ok&&call('bootstrap',T.admin).data.sug.length==3,'bỏ qua một đề xuất');
+const SKID=by('Việc đã quá hạn').id;ok(call('skipSuggestion',T.admin,{id:SKID}).ok&&!ctx.Db.all('AiSuggestions').some(x=>x.sug_id==SKID)&&call('bootstrap',T.admin).data.sug.length==3,'bỏ qua một đề xuất');
 call('deleteDoc',T.admin,{docId:D2});ok(call('bootstrap',T.admin).data.sug.length==0,'xóa văn bản → các đề xuất còn lại tự bỏ');
-t=call('bootstrap',T.lan).data.tasks.find(x=>x.id==NVA);ok(t.src.gone==1,'văn bản nguồn đã xóa khỏi kho → nhiệm vụ báo "đã xóa khỏi kho"');
+t=call('bootstrap',T.lan).data.tasks.find(x=>x.id==NVA);ok(t&&!t.src,'văn bản nguồn đã xóa → nhiệm vụ vẫn còn, chỉ gỡ liên kết tới văn bản');
 
 console.log('\n-- AI lỗi và dữ liệu xấu');
 gemini.reply=()=>({code:429,body:{error:{message:'quota'}}});
@@ -269,4 +269,63 @@ const kt=upl('anh','kt-loai.txt').data.id;ok(!call('confirmDoc',T.admin,{docId:k
 props.GEMINI_API_KEY='KEY123';gemini.reply=()=>resp({...GOOD,co_quan:'10'});
 r=upl('anh','cq10.txt');call('aiProcess',T.anh,{docId:r.data.id});ok(doc('admin',r.data.id).ai.r.ag=='10','AI chọn được cơ quan mới thêm');
 ok(gemini.calls[gemini.calls.length-1].body.systemInstruction.parts[0].text.includes('10=Công an phường'),'lời nhắc AI có cơ quan mới');
+
+console.log('\n-- 17. Tài liệu từ kho, xóa văn bản hoàn toàn, tải lên nhanh');
+{
+  props.GEMINI_API_KEY='';
+  const mk=(n)=>{const x=upl('admin',n,'noi dung '+n);call('confirmDoc',T.admin,{docId:x.data.id,tag:'Công văn',agency:'03'});return x.data.id};
+  const A1=mk('kho-a.txt'),A2=mk('kho-b.txt'),PEND=upl('anh','chua-phan-loai.txt','cho').data.id;
+  const base={title:'NV có tài liệu kho',desc:'x',due:'2026-12-30',pri:'Cao',assignees:[ids('Bùi Thị Lan')]};
+  r=call('createTask',T.admin,{...base,docs:[A1,A2,A1]});ok(r.ok,'giao nhiệm vụ kèm 2 văn bản từ kho (trùng được gộp): '+(r.error||''));const NK=r.data.id;
+  t=call('bootstrap',T.lan).data.tasks.find(x=>x.id==NK);ok(t.docs.length==2&&t.docs[0].id==A1&&t.docs[0].n=='kho-a.txt','người được giao thấy đúng 2 văn bản kèm theo');
+  ok(call('downloadDoc',T.lan,{docId:A1}).ok,'người được giao tải được văn bản từ kho');
+  r=call('createTask',T.admin,{...base,docs:[PEND]});ok(!r.ok,'không đính kèm văn bản chưa phân loại');
+  r=call('createTask',T.admin,{...base,docs:['VB-1999-001']});ok(!r.ok,'không đính kèm mã không tồn tại');
+  r=call('createTask',T.admin,{...base});ok(r.ok&&call('bootstrap',T.admin).data.tasks.find(x=>x.id==r.data.id).docs.length==0,'không chọn văn bản kho vẫn giao bình thường');
+  ok(call('editTask',T.admin,{id:NK,title:'NV có tài liệu kho',desc:'x',pri:'Cao',keep:[],docs:[A2]}).ok&&call('bootstrap',T.admin).data.tasks.find(x=>x.id==NK).docs.map(d=>d.id).join()==A2,'sửa nhiệm vụ: bỏ A1, giữ A2');
+  ok(call('editTask',T.admin,{id:NK,title:'NV có tài liệu kho',desc:'y',pri:'Cao',keep:[]}).ok&&call('bootstrap',T.admin).data.tasks.find(x=>x.id==NK).docs.length==1,'sửa không gửi danh sách văn bản → giữ nguyên');
+  ok(!call('createTask',T.lan,{...base,docs:[A1]}).ok,'nhân viên không giao được nhiệm vụ');
+  // xóa văn bản: xóa hẳn trong Sheets + thùng rác Drive
+  const row=ctx.Db.all('Documents').find(d=>d.doc_id==A2),fid=row.drive_file_id;
+  call('confirmDoc',T.admin,{docId:A1,tag:'Công văn',agency:'03'});
+  ctx.Db.append('Notifications',{notif_id:'NT-X1',to_user_id:'ADMIN',text:'Văn bản '+A2+' đã được phân loại',task_id:'',created_at:'2026-11-01T08:00:00',is_read:false});
+  ctx.Db.append('AiFeedback',{fb_id:'FB-X1',doc_name:'kho-b.txt',ai_tag:'Khác',ai_agency:'09',final_tag:'Công văn',final_agency:'03',at:'2026-11-01'});
+  ctx.Db.append('AiSuggestions',{sug_id:'DX-X1',doc_id:A2,title:'t',description:'d',due_date:'',source_text:'',how:'',status:'approved',task_id:NK,created_at:'2026-11-01'});
+  ctx.Db.update('Tasks',ctx.Db.all('Tasks').find(x=>x.task_id==NK)._row,{src_doc:A2});
+  ok(!call('deleteDoc',T.lan,{docId:A2}).ok,'nhân viên không xóa được văn bản');
+  ok(call('deleteDoc',T.admin,{docId:A2}).ok,'admin xóa văn bản trong kho');
+  ctx.Db.refresh('Documents');ctx.Db.refresh('TaskDocs');ctx.Db.refresh('Notifications');ctx.Db.refresh('AiFeedback');ctx.Db.refresh('AiSuggestions');
+  ok(!ctx.Db.all('Documents').some(d=>d.doc_id==A2),'dòng văn bản biến mất khỏi sheet Documents (không chỉ đánh dấu)');
+  ok(!ctx.Db.all('TaskDocs').some(d=>d.doc_id==A2),'liên kết tài liệu của nhiệm vụ bị xóa');
+  ok(!ctx.Db.all('Notifications').some(n=>String(n.text).includes(A2)),'thông báo nhắc văn bản bị xóa');
+  ok(!ctx.Db.all('AiFeedback').some(n=>n.doc_name=='kho-b.txt'),'ghi nhận sửa phân loại của văn bản bị xóa');
+  ok(!ctx.Db.all('AiSuggestions').some(n=>n.doc_id==A2),'đề xuất AI của văn bản bị xóa');
+  ok(files[fid].trashed===true,'tệp trong Drive vào thùng rác');
+  t=call('bootstrap',T.admin).data.tasks.find(x=>x.id==NK);ok(t&&t.docs.length==0&&!t.src,'nhiệm vụ còn nguyên, không còn liên kết');
+  ok(ctx.Db.all('Documents').some(d=>d.doc_id==A1),'văn bản khác không bị ảnh hưởng');
+  const nx=upl('admin','ma-moi.txt','ma moi').data.id;ok(nx!=A2&&Number(nx.slice(-3))>Number(A2.slice(-3)),'mã văn bản đã xóa không bị cấp lại: '+A2+' → '+nx);
+  // văn bản đang chờ phân loại cũng xóa được; AI đang đọc xong thì bỏ qua
+  const pf=ctx.Db.all('Documents').find(d=>d.doc_id==PEND).drive_file_id;
+  ok(call('deleteDoc',T.admin,{docId:PEND}).ok&&files[pf].trashed&&!ctx.Db.all('Documents').some(d=>d.doc_id==PEND),'xóa được cả văn bản đang chờ phân loại');
+  r=call('aiProcess',T.admin,{docId:PEND});ok(!r.ok&&r.code=='NOTFOUND','AI gọi cho văn bản đã xóa → báo không tìm thấy (không lỗi hệ thống)');
+  props.GEMINI_API_KEY='KEY123';const RC=upl('admin','xoa-giua-chung.txt','Cong van yeu cau cac truong bao cao truoc ngay 30/11/2026').data.id;
+  gemini.reply=()=>{call('deleteDoc',T.admin,{docId:RC});return resp(GOOD)};
+  r=call('aiProcess',T.admin,{docId:RC});ok(r.ok&&!ctx.Db.all('Documents').some(d=>d.doc_id==RC),'xóa văn bản trong lúc AI đang đọc → kết quả AI bị bỏ, không tạo lại dòng');props.GEMINI_API_KEY='';
+  // tải lên: trả về dòng văn bản mới, tên tệp Drive có mã, không để lại tệp tạm
+  r=upl('anh','nhanh.txt','abc');ok(r.ok&&r.data.doc&&r.data.doc.id==r.data.id&&r.data.doc.mine==1&&r.data.doc.ok==0&&!r.state,'tải lên trả về ngay dòng văn bản mới (không kèm toàn bộ dữ liệu)');
+  const nf=files[ctx.Db.all('Documents').find(d=>d.doc_id==r.data.id).drive_file_id];ok(nf.blob.name.startsWith(r.data.id+'_'),'tên tệp Drive có tiền tố mã văn bản: '+nf.blob.name);
+  const before=Object.keys(files).length;r=upl('anh','nhanh.txt','abc');ok(!r.ok&&r.error.includes('đã tồn tại'),'văn bản trùng bị chặn');ok(Object.keys(files).length==before,'văn bản trùng không để lại tệp thừa trong Drive');
+  ok(ctx.Db.all('Documents').filter(d=>d.name=='nhanh.txt').length==1,'chỉ có một dòng cho tệp trùng');
+  // dọn văn bản đã đánh dấu xóa từ bản cũ
+  const OLD=upl('anh','ban-cu.txt','cu').data.id;ctx.Db.update('Documents',ctx.Db.all('Documents').find(d=>d.doc_id==OLD)._row,{is_deleted:true});
+  ctx.purgeDeletedDocs();ctx.Db.refresh('Documents');ok(!ctx.Db.all('Documents').some(d=>d.doc_id==OLD),'purgeDeletedDocs: dọn hẳn văn bản đã đánh dấu xóa từ bản cũ');
+  // dọn dữ liệu: thông báo > 30 ngày, đề xuất đã bỏ qua
+  ctx.Db.append('Notifications',{notif_id:'N-OLD',to_user_id:'ADMIN',text:'cũ',task_id:'',created_at:'2026-09-01T08:00:00',is_read:true});
+  ctx.Db.append('Notifications',{notif_id:'N-NEW',to_user_id:'ADMIN',text:'mới',task_id:'',created_at:ctx.now_(),is_read:false});
+  ctx.Db.append('AiSuggestions',{sug_id:'DX-S1',doc_id:'VB-X',title:'t',description:'',due_date:'',source_text:'',how:'',status:'skipped',task_id:'',created_at:'2026-11-01'});
+  ctx.Db.append('AiSuggestions',{sug_id:'DX-P1',doc_id:'VB-X',title:'p',description:'',due_date:'',source_text:'',how:'',status:'pending',task_id:'',created_at:'2026-11-01'});
+  r=ctx.dailyCleanup();ctx.Db.refresh('Notifications');ctx.Db.refresh('AiSuggestions');
+  ok(!ctx.Db.all('Notifications').some(n=>n.notif_id=='N-OLD')&&ctx.Db.all('Notifications').some(n=>n.notif_id=='N-NEW'),'dọn thông báo: xóa >30 ngày, giữ thông báo mới');
+  ok(!ctx.Db.all('AiSuggestions').some(n=>n.status=='skipped')&&ctx.Db.all('AiSuggestions').some(n=>n.sug_id=='DX-P1'),'dọn đề xuất đã bỏ qua, giữ đề xuất đang chờ');
+}
 console.log(`\nKẾT QUẢ: ${pass} đạt, ${fail} lỗi`);process.exit(fail?1:0);

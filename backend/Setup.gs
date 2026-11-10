@@ -142,6 +142,33 @@ function purgeDeletedTasks() {
   Logger.log('Đã dọn ' + gone.length + ' nhiệm vụ đã xóa, xóa ' + rows + ' dòng dữ liệu liên quan trong Google Sheets. Tệp trong Drive được giữ nguyên.');
 }
 
+// Dọn các văn bản đã xóa từ bản cũ (trước đây chỉ đánh dấu đã xóa): xóa hẳn dữ liệu trong Google Sheets, tệp Drive vào thùng rác.
+function purgeDeletedDocs() {
+  Db.refresh('Documents');
+  const gone = Db.all('Documents').filter(function (d) { return yes_(d.is_deleted); });
+  gone.forEach(wipeDoc_);
+  Logger.log('Đã xóa hẳn ' + gone.length + ' văn bản đã đánh dấu xóa khỏi Google Sheets (tệp Drive nằm trong thùng rác).');
+}
+
+// Dọn dữ liệu để Google Sheets không phình to: thông báo quá 30 ngày và đề xuất AI đã bỏ qua (cũ từ bản trước) bị xóa hẳn.
+// Chạy tự động mỗi ngày nếu đã chạy installCleanupTrigger; cũng có thể chạy tay.
+const NOTIF_KEEP_DAYS = 30;
+function dailyCleanup() {
+  const cut = addDays_(today_(), -NOTIF_KEEP_DAYS);
+  return withLock_(function () {
+    Db.refresh('Notifications'); Db.refresh('AiSuggestions');
+    const n = Db.removeWhere('Notifications', function (x) { return String(x.created_at).slice(0, 10) < cut; });
+    const s = Db.removeWhere('AiSuggestions', function (x) { return x.status === 'skipped'; });
+    Logger.log('Đã xóa ' + n + ' thông báo cũ hơn ' + NOTIF_KEEP_DAYS + ' ngày và ' + s + ' đề xuất AI đã bỏ qua.');
+    return { notifications: n, suggestions: s };
+  });
+}
+function installCleanupTrigger() {
+  ScriptApp.getProjectTriggers().filter(function (t) { return t.getHandlerFunction() === 'dailyCleanup'; }).forEach(function (t) { ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger('dailyCleanup').timeBased().atHour(2).everyDays(1).create();
+  Logger.log('Đã bật: mỗi ngày khoảng 2 giờ sáng hệ thống tự dọn thông báo cũ và đề xuất AI đã bỏ qua.');
+}
+
 function installAiTrigger() {
   ScriptApp.getProjectTriggers().filter(function (t) { return t.getHandlerFunction() === 'aiSweep'; }).forEach(function (t) { ScriptApp.deleteTrigger(t); });
   ScriptApp.newTrigger('aiSweep').timeBased().everyMinutes(5).create();

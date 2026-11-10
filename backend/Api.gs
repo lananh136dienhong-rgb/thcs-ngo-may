@@ -50,13 +50,18 @@ function notifsView_(u) {
     .sort(function (a, b) { return String(a.created_at) < String(b.created_at) ? 1 : -1; }).slice(0, 60)
     .map(function (n) { return { r: admin ? 'a' : 's', t: n.text, id: n.task_id || '', at: fmtTime_(n.created_at), n: yes_(n.is_read) ? 0 : 1 }; });
 }
-function docsView_(u) {
-  const admin = isAdmin_(u), name = {};
+function userNames_() {
+  const name = {};
   Db.all('Users').forEach(function (x) { name[x.user_id] = x.full_name; });
+  return name;
+}
+function docView_(d, admin, name, u) {
+  return { id: d.doc_id, n: d.name, sz: d.size_bytes, d: String(d.uploaded_at).slice(0, 10), by: name[d.uploaded_by] || '', k: d.tag || '', ok: yes_(d.reviewed) ? 1 : 0, ag: code_(d.agency), no: d.doc_no || '', sm: d.summary || '', ai: aiDocView_(d, admin), mine: d.uploaded_by === u.user_id ? 1 : 0 };
+}
+function docsView_(u) {
+  const admin = isAdmin_(u), name = userNames_();
   return Db.all('Documents').filter(function (d) { return !yes_(d.is_deleted) && (admin || yes_(d.reviewed) || d.uploaded_by === u.user_id); })
-    .map(function (d) {
-      return { id: d.doc_id, n: d.name, sz: d.size_bytes, d: String(d.uploaded_at).slice(0, 10), by: name[d.uploaded_by] || '', k: d.tag || '', ok: yes_(d.reviewed) ? 1 : 0, ag: code_(d.agency), no: d.doc_no || '', sm: d.summary || '', ai: aiDocView_(d, admin), mine: d.uploaded_by === u.user_id ? 1 : 0 };
-    });
+    .map(function (d) { return docView_(d, admin, name, u); });
 }
 function tasksView_(u, onlyId) {
   const admin = isAdmin_(u), name = {}, role = {};
@@ -64,7 +69,7 @@ function tasksView_(u, onlyId) {
   const nm = function (id) { return name[id] || id; };
   const docById = {};
   Db.all('Documents').forEach(function (d) { docById[d.doc_id] = d; });
-  const A = group_(Db.all('TaskAssignees'), 'task_id'), F = group_(Db.all('TaskFiles'), 'task_id'), S = group_(Db.all('Submissions'), 'task_id'),
+  const A = group_(Db.all('TaskAssignees'), 'task_id'), F = group_(Db.all('TaskFiles'), 'task_id'), TD = group_(Db.all('TaskDocs'), 'task_id'), S = group_(Db.all('Submissions'), 'task_id'),
     P = group_(Db.all('ProgressReports'), 'task_id'), X = group_(Db.all('Extensions'), 'task_id'), M = group_(Db.all('Messages'), 'task_id'), H = group_(Db.all('History'), 'task_id');
   const asc = function (k) { return function (a, b) { return String(a[k]) < String(b[k]) ? -1 : String(a[k]) > String(b[k]) ? 1 : 0; }; };
   return Db.all('Tasks').filter(function (t) {
@@ -80,6 +85,7 @@ function tasksView_(u, onlyId) {
     return {
       id: id, title: t.title, desc: t.description, pri: t.priority, cs: t.campus, to: t.department, kind: t.target_type,
       src: t.src_doc ? (docById[t.src_doc] && !yes_(docById[t.src_doc].is_deleted) ? { id: t.src_doc, n: docById[t.src_doc].name } : { id: t.src_doc, n: '', gone: 1 }) : null,
+      docs: (TD[id] || []).filter(function (x) { return docById[x.doc_id] && !yes_(docById[x.doc_id].is_deleted); }).map(function (x) { return { id: x.doc_id, n: docById[x.doc_id].name }; }),
       due: t.due_date, st: t.status, made: String(t.created_at).slice(0, 10), review: t.review_comment || '',
       as: as.map(function (a) { return nm(a.user_id); }),
       acc: as.filter(function (a) { return a.accepted_at; }).map(function (a) { return nm(a.user_id); }),
@@ -164,6 +170,17 @@ function b64_(fileId) {
   return { mime: blob.getContentType(), data: Utilities.base64Encode(blob.getBytes()) };
 }
 
+// Tài liệu liên quan lấy từ Kho văn bản: chỉ nhận văn bản đã phân loại (đã vào kho), bỏ trùng.
+function refDocs_(ids) {
+  const out = [];
+  (Array.isArray(ids) ? ids : []).forEach(function (id) {
+    const d = doc_(id);
+    if (!yes_(d.reviewed)) throw new AppError('Văn bản ' + d.doc_id + ' chưa được phân loại nên chưa thể đính kèm', 'BAD');
+    if (out.indexOf(d.doc_id) < 0) out.push(d.doc_id);
+  });
+  if (out.length > 10) throw new AppError('Mỗi nhiệm vụ chỉ đính tối đa 10 văn bản từ kho', 'BAD');
+  return out;
+}
 // ===================== NHIỆM VỤ: ADMIN =====================
 function apiCreateTask_(u, r) {
   admin_(u);
@@ -182,13 +199,14 @@ function apiCreateTask_(u, r) {
     to = r.to ? oneOf_(r.to, LISTS.dept, 'Tổ chuyên môn') : picked[0].department,
     kind = r.kind ? oneOf_(r.kind, LISTS.kind, 'Loại đối tượng') : (LISTS.kind.indexOf(picked[0].position) >= 0 ? picked[0].position : '');
   const fls = files_(r.files), id = Db.nextId('Tasks', 'task_id', 'NV-', 4), at = now_();
-  const srcDoc = r.srcDoc ? doc_(r.srcDoc).doc_id : '';
+  const srcDoc = r.srcDoc ? doc_(r.srcDoc).doc_id : '', refDocs = refDocs_(r.docs);
   Db.append('Tasks', { task_id: id, title: title, description: desc || 'Chưa có nội dung chi tiết.', priority: pri, campus: cs, department: to, target_type: kind, due_date: due, status: 'Chưa tiếp nhận', created_by: u.user_id, created_at: at, updated_at: at, review_comment: '', ext_pending: false, is_deleted: false, src_doc: srcDoc });
   picked.forEach(function (p) {
     Db.append('TaskAssignees', { row_id: Db.nextId('TaskAssignees', 'row_id', 'A', 3), task_id: id, user_id: p.user_id, accepted_at: '', added_by: u.user_id, added_at: at });
     notify_(p.user_id, 'Có nhiệm vụ mới ' + id + ': ' + title, id);
   });
   saveTaskFiles_(id, 'giao', fls, u.user_id, at);
+  refDocs.forEach(function (docId) { Db.append('TaskDocs', { row_id: Db.nextId('TaskDocs', 'row_id', 'D', 3), task_id: id, doc_id: docId, added_by: u.user_id, added_at: at }); });
   hist_(id, u.user_id, 'giao', 'Hiệu trưởng giao nhiệm vụ');
   return { id: id };
 }
@@ -196,7 +214,7 @@ function apiEditTask_(u, r) {
   admin_(u);
   const t = task_(r.id), keep = r.keep || [];
   const title = str_(r.title, 200, 'Tên nhiệm vụ', true), desc = str_(r.desc, 3000, 'Nội dung chi tiết'), pri = oneOf_(r.pri, LISTS.pri, 'Mức ưu tiên');
-  const fls = files_(r.files), at = now_();
+  const fls = files_(r.files), at = now_(), refDocs = Array.isArray(r.docs) ? refDocs_(r.docs) : null;
   // tên hiển thị -> file_id, phải tính giống tasksView_ để khớp với danh sách giao diện đang giữ
   const given = Db.all('TaskFiles').filter(function (f) { return f.task_id === t.task_id; }), fmap = {};
   given.forEach(function (f) { let n = f.name, i = 2; while (fmap[n] && fmap[n] !== f.file_id) n = f.name + ' (' + (i++) + ')'; fmap[n] = f.file_id; f._n = n; });
@@ -205,6 +223,10 @@ function apiEditTask_(u, r) {
     Db.removeWhere('TaskFiles', function (x) { return x.file_id === f.file_id; });
   });
   saveTaskFiles_(t.task_id, 'giao', fls, u.user_id, at);
+  if (refDocs) {   // danh sách văn bản từ kho được thay bằng danh sách mới
+    Db.removeWhere('TaskDocs', function (x) { return x.task_id === t.task_id; });
+    refDocs.forEach(function (docId) { Db.append('TaskDocs', { row_id: Db.nextId('TaskDocs', 'row_id', 'D', 3), task_id: t.task_id, doc_id: docId, added_by: u.user_id, added_at: at }); });
+  }
   setTask_(t, { title: title, description: desc, priority: pri });
   hist_(t.task_id, u.user_id, 'sua', 'Hiệu trưởng chỉnh sửa nội dung và tài liệu nhiệm vụ');
   notifyMembers_(t.task_id, 'Nhiệm vụ ' + t.task_id + ' đã được cập nhật', '');
@@ -216,7 +238,7 @@ function apiEditTask_(u, r) {
 // nếu cấp lại, tệp mới sẽ lẫn vào thư mục Drive của nhiệm vụ cũ.
 function purgeTaskData_(taskId) {
   let n = 0;
-  ['TaskAssignees', 'TaskFiles', 'Submissions', 'ProgressReports', 'Extensions', 'Messages', 'History', 'Notifications'].forEach(function (sh) {
+  ['TaskAssignees', 'TaskFiles', 'TaskDocs', 'Submissions', 'ProgressReports', 'Extensions', 'Messages', 'History', 'Notifications'].forEach(function (sh) {
     n += Db.removeWhere(sh, function (x) { return x.task_id === taskId; });
   });
   return n;
