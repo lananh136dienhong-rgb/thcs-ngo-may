@@ -47,7 +47,12 @@ function doPost(e) {
     } else {
       data = fn(user, req);
     }
-    return out_({ ok: true, data: data });
+    const resp = { ok: true, data: data };
+    // Website xin kèm dữ liệu mới nhất (refresh) để khỏi phải gọi thêm một lần nữa sau mỗi thao tác ghi.
+    if (req.refresh && (WRITE_ACTIONS.indexOf(req.action) >= 0 || req.action === 'login')) {
+      try { resp.state = apiBootstrap_(authUser_(req.action === 'login' ? data.token : req.token)); } catch (x) { console.error(x); }
+    }
+    return out_(resp);
   } catch (err) {
     if (err instanceof AppError) return out_({ ok: false, error: err.message, code: err.code });
     console.error(err && err.stack ? err.stack : err);

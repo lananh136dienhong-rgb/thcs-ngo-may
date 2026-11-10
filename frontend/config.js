@@ -12,5 +12,7 @@ window.CONFIG = {
   // Chu kỳ làm mới khi đang mở một nhiệm vụ (để thấy tin nhắn mới), tính bằng mili giây
   POLL_DETAIL_MS: 12000,
   // Chu kỳ làm mới các trang danh sách (nhiệm vụ, thông báo...). Tăng lên nếu lo vượt hạn mức Apps Script
-  POLL_LIST_MS: 45000
+  POLL_LIST_MS: 45000,
+  // Khi chuyển trang, chỉ tải lại dữ liệu nếu dữ liệu đang xem đã cũ hơn số mili giây này (giảm số lần gọi backend)
+  NAV_REFRESH_MS: 15000
 };

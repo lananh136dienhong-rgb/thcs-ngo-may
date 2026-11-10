@@ -19,7 +19,60 @@ const SCHEMA = {
 
 const Db = (function () {
   let book = null;
-  const cache = {};   // bộ nhớ đệm trong MỘT lần chạy, tự xóa khi có ghi
+  const memo = {};     // bộ nhớ trong MỘT lần chạy
+  // Bộ nhớ đệm dùng chung giữa các lần chạy (CacheService): giúp không phải đọc lại cả chục sheet ở mỗi yêu cầu.
+  // Khi ghi qua ứng dụng, bảng bị ghi tự được xóa khỏi đệm. Khi bạn sửa sheet BẰNG TAY, thay đổi có hiệu lực
+  // trong tối đa TTL giây (hoặc ngay lập tức nếu chạy hàm clearCache() trong Setup.gs).
+  const TTL = 90;
+  const CHUNK = 30000;      // ký tự mỗi mảnh: giới hạn 100 KB mỗi khóa, chữ có dấu tối đa 3 byte/ký tự
+  const MAX_CHUNKS = 60;    // bảng lớn hơn ~1,8 triệu ký tự thì không đưa vào đệm
+
+  function cache() { return CacheService.getScriptCache(); }
+  function ckey(n) { return 'tbl_' + n; }
+  function readCache(n) {
+    try {
+      const c = cache(), cnt = Number(c.get(ckey(n) + '_n') || 0);
+      if (!cnt) return null;
+      const keys = [];
+      for (let i = 0; i < cnt; i++) keys.push(ckey(n) + '_' + i);
+      const got = c.getAll(keys);
+      let s = '';
+      for (let i = 0; i < cnt; i++) { const p = got[keys[i]]; if (p == null) return null; s += p; }
+      return JSON.parse(s);
+    } catch (e) { return null; }
+  }
+  function writeCache(n, rows) {
+    try {
+      const c = cache();
+      if (c.get('lw')) return;   // vừa có thao tác ghi: không nạp đệm, tránh lưu nhầm dữ liệu cũ
+      const s = JSON.stringify(rows), o = {};
+      if (s.length > CHUNK * MAX_CHUNKS) return;
+      let k = 0;
+      for (let i = 0; i < s.length; i += CHUNK) o[ckey(n) + '_' + (k++)] = s.slice(i, i + CHUNK);
+      o[ckey(n) + '_n'] = String(k || 1);
+      if (!k) o[ckey(n) + '_0'] = '[]';
+      c.putAll(o, TTL);
+    } catch (e) { console.error(e); }
+  }
+  function dropCache(n) {
+    delete memo[n];
+    try {
+      const c = cache(), cnt = Number(c.get(ckey(n) + '_n') || 0), keys = [ckey(n) + '_n'];
+      for (let i = 0; i < cnt; i++) keys.push(ckey(n) + '_' + i);
+      c.removeAll(keys);
+      c.put('lw', '1', 15);    // đánh dấu "vừa ghi" trong 15 giây
+    } catch (e) { console.error(e); }
+  }
+  function clearAll() {
+    Object.keys(SCHEMA).forEach(function (n) {
+      delete memo[n];
+      try {
+        const c = cache(), cnt = Number(c.get(ckey(n) + '_n') || 0), keys = [ckey(n) + '_n'];
+        for (let i = 0; i < cnt; i++) keys.push(ckey(n) + '_' + i);
+        c.removeAll(keys);
+      } catch (e) { console.error(e); }
+    });
+  }
 
   function ss() { return book || (book = SpreadsheetApp.openById(prop_('SHEET_ID'))); }
   function sheet(n) {
@@ -40,8 +93,7 @@ const Db = (function () {
   // Chặn "công thức độc hại": văn bản bắt đầu bằng = + - @ sẽ bị Sheets hiểu là công thức.
   function safe(v) { return (typeof v === 'string' && /^[=+\-@]/.test(v)) ? "'" + v : v; }
 
-  function all(n) {
-    if (cache[n]) return cache[n];
+  function readSheet(n) {
     const vals = sheet(n).getDataRange().getValues();
     const h = vals[0].map(String);
     const rows = [];
@@ -51,11 +103,17 @@ const Db = (function () {
       h.forEach(function (c, j) { o[c] = norm(vals[i][j], c); });
       rows.push(o);
     }
-    return (cache[n] = rows);
+    return rows;
+  }
+  function all(n) {
+    if (memo[n]) return memo[n];
+    let rows = readCache(n);
+    if (!rows) { rows = readSheet(n); writeCache(n, rows); }
+    return (memo[n] = rows);
   }
   function append(n, obj) {
     sheet(n).appendRow(head(n).map(function (c) { return obj[c] === undefined ? '' : safe(obj[c]); }));
-    delete cache[n];
+    dropCache(n);
   }
   function update(n, row, patch) {
     const h = head(n), rng = sheet(n).getRange(row, 1, 1, h.length), cur = rng.getValues()[0];
@@ -64,12 +122,12 @@ const Db = (function () {
       if (i >= 0) cur[i] = safe(patch[k]);
     });
     rng.setValues([cur]);
-    delete cache[n];
+    dropCache(n);
   }
   function removeWhere(n, pred) {
     const rows = all(n).filter(pred).map(function (r) { return r._row; }).sort(function (a, b) { return b - a; });
     rows.forEach(function (r) { sheet(n).deleteRow(r); });
-    delete cache[n];
+    dropCache(n);
     return rows.length;
   }
   function nextId(n, col, prefix, pad) {
@@ -80,5 +138,5 @@ const Db = (function () {
     });
     return prefix + String(m + 1).padStart(pad, '0');
   }
-  return { all: all, append: append, update: update, removeWhere: removeWhere, nextId: nextId };
+  return { all: all, append: append, update: update, removeWhere: removeWhere, nextId: nextId, clearAll: clearAll };
 })();

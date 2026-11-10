@@ -173,7 +173,7 @@ Lưu, chờ 1–5 phút để áp dụng, rồi mở địa chỉ Cloudflare và
 | Việc | Cách làm |
 |---|---|
 | Thêm nhân viên mới | Thêm một dòng vào sheet `Users` (`active = TRUE`), chạy `checkUsers`. Có hiệu lực ngay. |
-| Nhân viên thôi việc | Đổi `active` thành `FALSE`. Mất quyền ngay ở lần thao tác kế tiếp, không cần chờ hết phiên. |
+| Nhân viên thôi việc | Đổi `active` thành `FALSE` trong sheet `Users`. Mất quyền trong tối đa **90 giây** (độ trễ của bộ nhớ đệm, xem mục 13), không cần chờ hết phiên. Muốn có hiệu lực ngay, chạy hàm `clearCache` trong Apps Script. |
 | Đổi chức vụ, tổ, cơ sở | Hiệu trưởng sửa trong hồ sơ cá nhân (chỉ Hiệu trưởng sửa được), hoặc sửa trực tiếp trong sheet `Users`. Nếu lên Tổ trưởng/Phó hiệu trưởng nhớ đổi `app_role` thành `leader`. |
 | Nhân viên không đăng nhập được | Xem thông báo lỗi trên màn hình đăng nhập (có ghi email Google nhận diện) và đối chiếu với cột `email` trong sheet `Users`. |
 | Xem dung lượng Drive | Vào <https://drive.google.com/settings/storage>. Tài khoản cá nhân có 15 GB dùng chung với Gmail. Nên kiểm tra mỗi học kỳ; khi gần đầy, lưu trữ thư mục `NopBai` của năm cũ về máy rồi xóa. |
@@ -199,7 +199,7 @@ Mã đã được kiểm thử ở hai mức: toàn bộ logic backend trên mô
 
 Đã làm trong mã:
 - Mọi thao tác kiểm tra quyền ở backend; nhân viên chỉ thấy nhiệm vụ được giao; chỉ admin duyệt, xóa, phân loại.
-- Chỉ email trong sheet `Users` đang `active` mới đăng nhập được; khóa tài khoản có hiệu lực ngay.
+- Chỉ email trong sheet `Users` đang `active` mới đăng nhập được; khóa tài khoản có hiệu lực trong tối đa 90 giây (hoặc ngay nếu chạy `clearCache`).
 - Token phiên ký HMAC, hết hạn sau 8 giờ, lưu trong `sessionStorage` (đóng tab là mất).
 - Chặn "công thức độc hại" khi người dùng nhập văn bản bắt đầu bằng `=`, `+`, `-`, `@`.
 - Giới hạn định dạng, dung lượng và số lượng tệp; chặn văn bản trùng tên + dung lượng.
@@ -223,6 +223,7 @@ Việc bạn cần giữ:
 | Sửa mã rồi nhưng website vẫn như cũ | Chưa tạo New version | Mục 4, "Khi sửa mã backend" |
 | "Email … chưa được cấp quyền" | Email không khớp sheet `Users` | So sánh chính xác từng ký tự (chú ý dấu chấm trong Gmail), `active = TRUE` |
 | "Hệ thống đang bận" | Nhiều người ghi cùng lúc | Thử lại sau vài giây |
+| Vừa sửa sheet bằng tay nhưng website chưa thấy | Bộ nhớ đệm giữ dữ liệu tối đa 90 giây | Chờ 90 giây hoặc chạy hàm `clearCache` trong Apps Script |
 | `Exceeded maximum execution time` hoặc tải rất chậm | Tệp quá lớn hoặc sheet quá nhiều dòng | Hạ `MAX_FILE_MB`; lưu trữ dữ liệu cũ |
 | "Thiếu sheet: …" | Chưa chạy `setup()`, hoặc đổi tên sheet | Chạy `setup()` (an toàn khi chạy lại, không ghi đè dữ liệu) |
 | `Service invoked too many times` | Vượt hạn mức hằng ngày của Apps Script | Chờ sang ngày; tăng `POLL_DETAIL_MS` và `POLL_LIST_MS` trong `config.js` để giảm số lần gọi |
@@ -238,3 +239,27 @@ Việc bạn cần giữ:
 - **Đăng nhập chỉ bằng Google.** Phương án mật khẩu 6 số không được cài đặt vì mô hình thuần Google không có nơi lưu mật khẩu an toàn.
 
 Khi trường phát triển (nhiều người dùng, nhiều tệp, cần chat tức thời), có thể thay `Db.gs` và `saveDrive_` bằng Supabase và Cloudflare R2 mà giao diện và các hàm nghiệp vụ gần như không đổi.
+
+## 13. Tốc độ và bộ nhớ đệm
+
+**Vì sao chậm:** mỗi lần gọi, Apps Script phải khởi chạy rồi đọc lại hàng chục sheet từ Google Sheets. Đo thực tế (F12 → Network → lọc `exec`) trước khi tối ưu cho thấy mỗi lần gọi mất khoảng 4,5–5,6 giây. Dòng trạng thái `302` là bước chuyển hướng bình thường của Apps Script, thời gian hiển thị chính là lúc script đang chạy.
+
+**Đã tối ưu trong mã:**
+- **Bộ nhớ đệm** (`Db.gs`): dữ liệu các sheet được giữ tối đa 90 giây và dùng chung cho mọi người dùng. Bảng nào vừa được ghi sẽ tự bị xóa khỏi đệm, nên dữ liệu qua ứng dụng luôn mới. Khi chạy kiểm thử, lần đọc thứ hai từ đệm không phải đọc sheet nào.
+- **Một lần gọi thay vì hai**: sau mỗi thao tác ghi, và sau khi đăng nhập, backend trả kèm luôn dữ liệu mới nhất.
+- **Làm mới thưa hơn**: khi chuyển trang chỉ tải lại nếu dữ liệu cũ hơn `NAV_REFRESH_MS` (mặc định 15 giây); trang danh sách làm mới mỗi 45 giây.
+- **Báo đang xử lý**: thanh tiến trình trên cùng và dòng "Đang tải dữ liệu…" khi mở trang.
+- **Đánh thức backend** bằng một yêu cầu nhẹ khi mở màn hình đăng nhập.
+
+**Đánh đổi bạn cần biết:** nếu bạn sửa Google Sheet **bằng tay** (thêm nhân viên, khóa tài khoản...), website thấy thay đổi sau tối đa 90 giây. Muốn thấy ngay, chạy hàm `clearCache` trong Apps Script. Sửa qua website thì luôn cập nhật ngay.
+
+**Cách cập nhật khi đã triển khai:**
+1. Apps Script: dán lại các file `Db.gs`, `Code.gs`, `Setup.gs`, rồi **Deploy → Manage deployments → bút chì → New version → Deploy**.
+2. Giao diện: đẩy thư mục `frontend` lên GitHub (Cloudflare tự cập nhật). Không cần đổi `config.js` nếu bạn đã điền đúng; chỉ thêm dòng `NAV_REFRESH_MS: 15000` nếu file của bạn chưa có.
+3. Mở website bằng Ctrl+F5 để tải bản mới (chúng tôi đã đổi `?v=1` thành `?v=2`).
+
+**Đo lại để so sánh:** F12 → Network → lọc `exec` → xem cột **Time**. Lần gọi đầu sau thời gian không dùng vẫn có thể chậm (backend khởi động lại); hãy so các lần gọi từ thứ hai trở đi.
+
+**Chỉnh số liệu trong `config.js`:** `POLL_DETAIL_MS` (chu kỳ làm mới khi đang mở nhiệm vụ), `POLL_LIST_MS` (chu kỳ làm mới trang danh sách), `NAV_REFRESH_MS` (độ cũ tối đa khi chuyển trang). Tăng các số này để giảm số lần gọi backend, đổi lại dữ liệu của người khác hiện chậm hơn.
+
+**Nếu vẫn chậm:** Apps Script có độ trễ vốn có mỗi lần gọi nên không thể nhanh bằng website dùng cơ sở dữ liệu chuyên dụng. Khi đó cân nhắc thay Google Sheets bằng Supabase hoặc Cloudflare D1 (giữ nguyên giao diện, thay `Db.gs` và `saveDrive_`).

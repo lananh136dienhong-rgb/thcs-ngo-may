@@ -3,7 +3,13 @@
  *  setup()               : tạo Google Sheet, các thư mục Drive, khóa bí mật, tài khoản Hiệu trưởng (chạy 1 lần)
  *  checkUsers()          : kiểm tra danh sách nhân viên trong sheet Users, in lỗi ra nhật ký
  *  installWeeklyBackup() : bật sao lưu Sheet tự động mỗi tuần
+ *  clearCache()          : xóa bộ nhớ đệm, chạy sau khi sửa sheet BẰNG TAY nếu muốn có hiệu lực ngay
  */
+
+function clearCache() {
+  Db.clearAll();
+  Logger.log('Đã xóa bộ nhớ đệm. Dữ liệu sẽ được đọc lại từ Google Sheets ở lần gọi tiếp theo.');
+}
 
 function setup() {
   const P = PropertiesService.getScriptProperties();

@@ -125,7 +125,7 @@ let lastList=Date.now();
 // dirty(): người dùng đang nhập hoặc đã chọn tệp trong biểu mẫu thì không vẽ lại, tránh mất dữ liệu đang nhập.
 function dirty(){const m=document.querySelector('main');if(!m)return false;if(document.activeElement?.matches?.('input,textarea,select'))return true;
  return [...m.querySelectorAll('form[data-f] input[type=file]')].some(i=>i.files.length)||[...m.querySelectorAll('form[data-f] textarea,form[data-f] input:not([type=file]):not([type=search])')].some(i=>i.value&&i.value!==i.defaultValue)}
-function refreshSoon(){if(busy)return;lastList=Date.now();load().then(()=>{if(!S.m&&!busy&&S.page!='cr'&&!dirty())draw()}).catch(e=>{if(e.code=='AUTH')logout(true)})}
+function refreshSoon(){if(busy||Date.now()-lastList<(CONFIG.NAV_REFRESH_MS??15000))return;load().then(()=>{if(!S.m&&!busy&&S.page!='cr'&&!dirty())draw()}).catch(e=>{if(e.code=='AUTH')logout(true)})}
 const efh=()=>S.ef.map(f=>`<span class="chip">${esc(f)}<button type="button" data-a="rmf" data-v="${esc(f)}" aria-label="Xóa ${esc(f)}">✕</button></span>`).join('')||'<span class="sub">Chưa có tài liệu</span>';
 const rl=()=>{const r=S.rf;return T.filter(t=>(!r.a||t.made>=r.a)&&(!r.b||t.made<=r.b)&&(!r.who||t.as.includes(r.who))&&(!r.to||t.to==r.to)&&(!r.cs||t.cs==r.cs)&&(!r.st||(r.st=='Quá hạn'?od(t):t.st==r.st)))};
 function mkpdf(J){const en=new TextEncoder(),parts=[],off=[];let len=0;const add=v=>{const u=typeof v=='string'?en.encode(v):v;parts.push(u);len+=u.length},N=J.length;
@@ -155,8 +155,9 @@ saveFile('thong-ke-nhiem-vu-'+TD+'.pdf',mkpdf(J))}
 /* ---------- TẢI DỮ LIỆU ---------- */
 // loadSeq: nếu có nhiều lần tải chạy song song, chỉ lần gọi MỚI NHẤT được áp dụng (tránh dữ liệu cũ ghi đè dữ liệu mới).
 let loadSeq=0;
-async function load(){const my=++loadSeq;const d=await API.call('bootstrap');if(my!==loadSeq)return;TD=d.today;ME=d.me.n;PR.a=PR.s=PR.l=d.me;S.role={admin:'a',staff:'s',leader:'l'}[d.me.role];
- T=d.tasks;D=d.docs;N=d.notifs;PPL=d.people;TAGS=d.tags;CONFIG.MAX_FILE_MB=d.maxFileMB||CONFIG.MAX_FILE_MB}
+function applyState(d){TD=d.today;ME=d.me.n;PR.a=PR.s=PR.l=d.me;S.role={admin:'a',staff:'s',leader:'l'}[d.me.role];
+ T=d.tasks;D=d.docs;N=d.notifs;PPL=d.people;TAGS=d.tags;CONFIG.MAX_FILE_MB=d.maxFileMB||CONFIG.MAX_FILE_MB;lastList=Date.now()}
+async function load(){const my=++loadSeq;const d=await API.call('bootstrap');if(my!==loadSeq)return;applyState(d)}
 function markRead(){N.forEach(n=>n.n=0);API.call('readNotifs').catch(()=>{})}
 const OK_EXT=/\.(pdf|docx|xlsx|pptx|png|jpe?g|mp4|csv|txt)$/i;
 async function readFiles(list){const out=[];for(const f of list){
@@ -172,10 +173,10 @@ async function dlTask(t,name){try{const fid=t?.fmap?.[name];if(!fid)return;toast
 /* ---------- SỰ KIỆN ---------- */
 let busy=false;
 // act: gửi một thao tác ghi lên backend, tải lại dữ liệu, thông báo kết quả và vẽ lại.
-async function act(action,payload,okMsg,done){if(busy)return;busy=true;document.body.style.cursor='progress';
- try{const r=await API.call(action,payload);await load();if(okMsg)toast(okMsg);S.m=null;S.err='';if(done)done(r);else draw();return r}
+async function act(action,payload,okMsg,done){if(busy)return;busy=true;document.body.style.cursor='progress';document.body.classList.add('busy');
+ try{const {data:r,state}=await API.callR(action,payload);if(state){++loadSeq;applyState(state)}else await load();if(okMsg)toast(okMsg);S.m=null;S.err='';if(done)done(r);else draw();return r}
  catch(e){if(e.code=='AUTH')return logout(true);toast(e.message||'Có lỗi xảy ra, vui lòng thử lại')}
- finally{busy=false;document.body.style.cursor=''}}
+ finally{busy=false;document.body.style.cursor='';document.body.classList.remove('busy')}}
 document.addEventListener('click',e=>{const b=e.target.closest('[data-a],[data-m]');if(!b)return;const a=b.dataset.a,t=S.tid&&find(S.tid),v=b.dataset.v,id=t&&t.id;
 if(b.dataset.m){S.m=b.dataset.m;return draw()}
 if(a=='x'){if(e.target!=b)return;S.m=null;return draw()}if(a=='close'){S.m=null;return draw()}
@@ -228,8 +229,9 @@ function showLogin(){$('#root').innerHTML='';$('#login').hidden=false;const m=se
   google.accounts.id.initialize({client_id:CONFIG.GOOGLE_CLIENT_ID,callback:onCred,auto_select:false});
   google.accounts.id.renderButton($('#gbtn'),{theme:'outline',size:'large',text:'signin_with',width:280,locale:'vi'})}},150)}
 function setMsg(x,err){const e=$('#lmsg');e.textContent=x;e.className=err?'err':'sub'}
-async function onCred(resp){try{setMsg('Đang kiểm tra tài khoản…');const r=await API.call('login',{idToken:resp.credential});sessionStorage.setItem('tok',r.token);await boot()}catch(e){setMsg(e.message,true)}}
-async function boot(){try{await load();$('#login').hidden=true;S.page='ov';draw()}catch(e){if(e.code=='AUTH'){sessionStorage.removeItem('tok');showLogin()}else{showLogin();setMsg(e.message||'Không kết nối được máy chủ, vui lòng thử lại.',true)}}}
+async function onCred(resp){document.body.classList.add('busy');try{setMsg('Đang kiểm tra tài khoản…');const {data,state}=await API.callR('login',{idToken:resp.credential});sessionStorage.setItem('tok',data.token);
+ if(state){applyState(state);$('#login').hidden=true;S.page='ov';draw()}else await boot()}catch(e){setMsg(e.message,true)}finally{document.body.classList.remove('busy')}}
+async function boot(){document.body.classList.add('busy');$('#login').hidden=true;$('#root').innerHTML='<div class="boot" role="status">Đang tải dữ liệu…</div>';try{await load();S.page='ov';draw()}catch(e){if(e.code=='AUTH'){sessionStorage.removeItem('tok');showLogin()}else{showLogin();setMsg(e.message||'Không kết nối được máy chủ, vui lòng thử lại.',true)}} finally{document.body.classList.remove('busy')}}
 function keepChat(fn){const i=document.querySelector('.cin input'),v=i?.value,had=document.activeElement===i;fn();const n=document.querySelector('.cin input');if(n&&v){n.value=v;if(had)n.focus()}}
 // Làm mới định kỳ (Apps Script không có kết nối thời gian thực nên hỏi lại máy chủ)
 setInterval(async()=>{if(document.hidden||busy||S.m||!sessionStorage.getItem('tok'))return;
@@ -237,4 +239,4 @@ setInterval(async()=>{if(document.hidden||busy||S.m||!sessionStorage.getItem('to
   if(S.tid){const nt=await API.call('getTask',{id:S.tid}),i=T.findIndex(x=>x.id==S.tid);if(nt&&i>=0&&JSON.stringify(T[i])!==JSON.stringify(nt)){T[i]=nt;keepChat(draw)}}
   else if(S.page!='cr'&&Date.now()-lastList>(CONFIG.POLL_LIST_MS||45000)&&!dirty()){lastList=Date.now();await load();draw()}}
  catch(e){if(e.code=='AUTH')logout(true)}},CONFIG.POLL_DETAIL_MS);
-window.addEventListener('load',()=>{sessionStorage.getItem('tok')?boot():showLogin()});
+window.addEventListener('load',()=>{if(sessionStorage.getItem('tok'))boot();else{API.warm();showLogin()}});
