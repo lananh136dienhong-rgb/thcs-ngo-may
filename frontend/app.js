@@ -5,7 +5,7 @@
  *  - Các hàm vẽ giao diện (aOv, sOv, dtl, modal, draw...) đọc các biến này và dựng HTML.
  *  - Mọi thao tác ghi dữ liệu đi qua act(...) → API.call → backend kiểm tra quyền → tải lại dữ liệu → vẽ lại.
  */
-let ME='',TD='',TAGS=[],T=[],D=[],N=[],PPL=[],SUG=[],AGS=[],TF={},AIOK=0;
+let ME='',TD='',TAGS=[],T=[],D=[],N=[],PPL=[],SUG=[],AGS=[],TF={},AIOK=0,BV='';const FV='4';
 const PR={a:null,s:null,l:null};   // hồ sơ người đang đăng nhập (dùng chung cho 3 vai trò)
 const $=s=>document.querySelector(s),fd=i=>i.split('-').reverse().join('/'),ini=n=>n.split(' ').slice(-2).map(w=>w[0]).join('');
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -75,8 +75,9 @@ function upRow(d){const a=d.ai||{},r=a.r,run=RUN.has(d.id)||a.st=='reading'||a.s
 <select data-sel="ag" data-id="${d.id}" aria-label="Cơ quan ban hành"><option value="">Chọn cơ quan ban hành</option>${AGS.map(x=>`<option value="${x.c}" ${x.c==sel.ag?'selected':''}>${esc(x.n)}</option>`).join('')}</select>${cf}
 <span style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn t" data-a="cfm" data-id="${d.id}" ${run?'disabled':''}>Lưu và đồng ý</button>${AIOK&&!run&&a.st!='ready'?`<button class="btn" data-a="runai" data-id="${d.id}">Chạy AI</button>`:''}<button class="btn" data-a="ddel" data-id="${d.id}" style="color:#d23b3b" aria-label="Xóa ${d.id}">Xóa</button></span></div>
 <div class="upd"><div>${l1}</div>${r?.q?`<div class="sub"><i>“${esc(r.q)}”</i></div>`:''}<div id="sv-${d.id}">${svp(sel.k,sel.ag)}</div>${r?.nt?`<div class="sub">✦ AI tìm thấy ${r.nt} việc cần làm. Sau khi bạn đồng ý, các việc này xuất hiện ở mục “Đề xuất nhiệm vụ từ AI”.</div>`:''}${r?.mat?'<div style="color:#d23b3b">⚠ Văn bản Mật: AI không gợi ý nhiệm vụ. Không nên tải văn bản mật lên hệ thống.</div>':''}</div></div>`}
+const verBar=()=>BV?`<div class="sub" style="margin:-6px 0 10px">Giao diện v${FV} · Máy chủ ${esc(BV)}</div>`:`<div class="card" style="background:#fdecec;border-color:#d23b3b;margin-bottom:12px"><b style="color:#d23b3b">Máy chủ (Apps Script) đang chạy bản CŨ, chưa có tính năng AI.</b><div class="sub">Hãy dán lại các file .gs, rồi Deploy → Manage deployments → bút chì → New version → Deploy. Nếu bạn tạo “New deployment” thì địa chỉ /exec đổi, phải sửa API_URL trong config.js.</div></div>`;
 function aUp(){const P=D.filter(d=>!d.ok);
-return `<h1>Tải văn bản</h1><p class="sub">Tải văn bản mới lên. AI (nếu bật) đọc và gợi ý phân loại; nếu không bạn tự chọn. <b>Văn bản chỉ vào Kho văn bản sau khi bạn chọn loại văn bản, cơ quan ban hành và bấm “Lưu và đồng ý”.</b></p>${upForm(1)}
+return `<h1>Tải văn bản</h1>${verBar()}<p class="sub">Tải văn bản mới lên. AI (nếu bật) đọc và gợi ý phân loại; nếu không bạn tự chọn. <b>Văn bản chỉ vào Kho văn bản sau khi bạn chọn loại văn bản, cơ quan ban hành và bấm “Lưu và đồng ý”.</b></p>${upForm(1)}
 <div class="card sc" style="margin-bottom:14px"><h2>Chờ xác nhận phân loại (${P.length})</h2><div class="sub" style="margin-bottom:8px">Muốn sửa gợi ý của AI, đổi lựa chọn trong ô rồi bấm “Lưu và đồng ý”. Hệ thống ghi nhận các lần sửa để gợi ý chính xác hơn.</div><div class="tr h" style="grid-template-columns:${UPG};min-width:1000px"><span>MÃ VĂN BẢN</span><span>TÊN TỆP</span><span>NGÀY TẢI</span><span>LOẠI${AIOK?' (AI GỢI Ý)':''}</span><span>CƠ QUAN${AIOK?' (AI GỢI Ý)':''}</span><span>TIN CẬY</span><span>THAO TÁC</span></div>${P.map(upRow).join('')||'<p class="sub" style="padding:20px">Không có văn bản nào đang chờ phân loại.</p>'}</div>${tagCard()}`}
 function khoList(adm){const L=kfl(D.filter(d=>d.ok)),gt=`110px minmax(180px,2fr) 90px 130px minmax(160px,1.4fr) ${adm?150:100}px`;
  return `<div class="tr h" style="grid-template-columns:${gt};min-width:900px"><span>MÃ VĂN BẢN</span><span>TÊN TỆP</span><span>NGÀY TẢI</span><span>LOẠI VĂN BẢN</span><span>CƠ QUAN BAN HÀNH</span><span></span></div>`
@@ -190,7 +191,7 @@ saveFile('thong-ke-nhiem-vu-'+TD+'.pdf',mkpdf(J))}
 // loadSeq: nếu có nhiều lần tải chạy song song, chỉ lần gọi MỚI NHẤT được áp dụng (tránh dữ liệu cũ ghi đè dữ liệu mới).
 let loadSeq=0;
 function applyState(d){TD=d.today;ME=d.me.n;PR.a=PR.s=PR.l=d.me;S.role={admin:'a',staff:'s',leader:'l'}[d.me.role];
- T=d.tasks;D=d.docs;N=d.notifs;PPL=d.people;TAGS=d.tags;SUG=d.sug||[];AGS=d.ags||[];TF=d.tf||{};AIOK=d.ai||0;CONFIG.MAX_FILE_MB=d.maxFileMB||CONFIG.MAX_FILE_MB;lastList=Date.now();setTimeout(kickAi,0)}
+ T=d.tasks;D=d.docs;N=d.notifs;PPL=d.people;TAGS=d.tags;SUG=d.sug||[];AGS=d.ags||[];TF=d.tf||{};AIOK=d.ai||0;BV=d.v||'';CONFIG.MAX_FILE_MB=d.maxFileMB||CONFIG.MAX_FILE_MB;lastList=Date.now();setTimeout(kickAi,0)}
 async function load(){const my=++loadSeq;const d=await API.call('bootstrap');if(my!==loadSeq)return;applyState(d)}
 function markRead(){N.forEach(n=>n.n=0);API.call('readNotifs').catch(()=>{})}
 const OK_EXT=/\.(pdf|docx|xlsx|pptx|png|jpe?g|mp4|csv|txt)$/i;

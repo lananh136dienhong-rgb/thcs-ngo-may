@@ -47,7 +47,9 @@ class AppError extends Error {
   constructor(msg, code) { super(msg); this.code = code || 'ERR'; }
 }
 
-function doGet() { return out_({ ok: true, data: 'THCS Ngô Mây API đang chạy' }); }
+// Số phiên bản backend: mở địa chỉ /exec trên trình duyệt để xem đang chạy bản nào (giúp biết đã Deploy đúng hay chưa).
+const APP_VERSION = 'ai-4';
+function doGet() { return out_({ ok: true, data: 'THCS Ngô Mây API đang chạy, phiên bản ' + APP_VERSION }); }
 
 function doPost(e) {
   let req;

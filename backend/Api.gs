@@ -20,7 +20,7 @@ function routes_() {
 // ===================== ĐỌC DỮ LIỆU =====================
 function apiBootstrap_(u) {
   return {
-    today: today_(), me: me_(u), tasks: tasksView_(u), docs: docsView_(u), notifs: notifsView_(u),
+    v: APP_VERSION, today: today_(), me: me_(u), tasks: tasksView_(u), docs: docsView_(u), notifs: notifsView_(u),
     people: peopleView_(u), sug: suggestionsView_(u), ai: aiEnabled_() ? 1 : 0,
     ags: agencies_().map(function (a) { return { c: a.code, n: a.name, f: a.folder }; }),
     tf: Db.all('DocTags').filter(function (t) { return yes_(t.active); }).reduce(function (m, t) { m[t.tag_name] = typeFolder_(t.tag_name); return m; }, {}),
