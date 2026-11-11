@@ -328,4 +328,44 @@ console.log('\n-- 17. Tài liệu từ kho, xóa văn bản hoàn toàn, tải l
   ok(!ctx.Db.all('Notifications').some(n=>n.notif_id=='N-OLD')&&ctx.Db.all('Notifications').some(n=>n.notif_id=='N-NEW'),'dọn thông báo: xóa >30 ngày, giữ thông báo mới');
   ok(!ctx.Db.all('AiSuggestions').some(n=>n.status=='skipped')&&ctx.Db.all('AiSuggestions').some(n=>n.sug_id=='DX-P1'),'dọn đề xuất đã bỏ qua, giữ đề xuất đang chờ');
 }
+console.log('\n== 18. Điều chỉnh nhân sự theo vai trò (leader / admin)');
+{
+  const U=n=>ctx.Db.all('Users').find(x=>x.full_name==n);
+  add('U011','Đỗ Văn Hùng','hung@gmail.com','Giáo viên','staff','Tổ KHTN – Công nghệ','Trường chính');
+  // nâng Bùi Thị Lan (chức vụ Giáo viên) từ staff lên leader, giống như sửa tay trong Google Sheet
+  ctx.Db.update('Users',U('Bùi Thị Lan')._row,{app_role:'leader'});
+  const L=call('createTask',T.admin,{title:'Nhân sự 1',due:'2026-12-31',assignees:[U('Bùi Thị Lan').user_id,U('Phạm Đức Long').user_id]}).data.id;
+  const asx=(tok,id)=>call('bootstrap',tok).data.tasks.find(t=>t.id==id)?.asx;
+  ok(call('bootstrap',T.lan).data.people.length>0,'leader mới (chức vụ Giáo viên) nhận danh sách nhân sự');
+  r=call('addAssignee',T.lan,{id:L,userId:U('Đỗ Văn Hùng').user_id});ok(r.ok,'leader mới (chức vụ Giáo viên) thêm được người cùng tổ');
+  r=call('addAssignee',T.lan,{id:L,userId:'U005'});ok(!r.ok&&r.code=='FORBIDDEN','leader không phải PHT không thêm người khác tổ');
+  let x=asx(T.admin,L);ok(x.find(a=>a.n=='Đỗ Văn Hùng').by=='l'&&x.find(a=>a.n=='Phạm Đức Long').by=='a','asx đánh dấu đúng người do admin / leader thêm');
+  r=call('removeAssignee',T.anh,{id:L,userId:U('Đỗ Văn Hùng').user_id});ok(!r.ok,'staff không bớt người');
+  r=call('removeAssignee',T.lan,{id:L,userId:U('Phạm Đức Long').user_id});ok(!r.ok&&r.code=='FORBIDDEN','leader KHÔNG bớt được người do admin giao');
+  r=call('removeAssignee',T.tt,{id:L,userId:U('Phạm Đức Long').user_id});ok(!r.ok,'leader không tự rút khỏi nhiệm vụ');
+  r=call('removeAssignee',T.tt,{id:L,userId:U('Đỗ Văn Hùng').user_id});ok(r.ok,'leader bớt được người do leader khác thêm');
+  ok(!asx(T.admin,L).some(a=>a.n=='Đỗ Văn Hùng'),'người bị bớt không còn trong nhiệm vụ');
+  r=call('removeAssignee',T.pht,{id:L,userId:U('Bùi Thị Lan').user_id});ok(!r.ok&&r.code=='FORBIDDEN','leader ngoài nhiệm vụ không bớt được');
+  call('addAssignee',T.lan,{id:L,userId:U('Đỗ Văn Hùng').user_id});
+  // dòng cũ không có added_by → coi như admin giao
+  const row=ctx.Db.all('TaskAssignees').find(a=>a.task_id==L&&a.user_id==U('Đỗ Văn Hùng').user_id);ctx.Db.update('TaskAssignees',row._row,{added_by:''});
+  r=call('removeAssignee',T.lan,{id:L,userId:U('Đỗ Văn Hùng').user_id});ok(!r.ok,'dòng cũ không ghi người thêm được coi là admin giao');
+  ctx.Db.update('TaskAssignees',ctx.Db.all('TaskAssignees').find(a=>a.task_id==L&&a.user_id==U('Đỗ Văn Hùng').user_id)._row,{added_by:U('Bùi Thị Lan').user_id});
+  // admin sửa nhân sự trong form Sửa nhiệm vụ: bớt người do leader thêm, thêm người mới
+  const base={id:L,title:'Nhân sự 1',desc:'',pri:'Trung bình',keep:[]};
+  r=call('editTask',T.admin,{...base,as:[]});ok(!r.ok,'admin không để nhiệm vụ trống người');
+  r=call('editTask',T.admin,{...base,as:[U('Bùi Thị Lan').user_id,U('Phạm Đức Long').user_id,'U005']});ok(r.ok,'admin sửa nhân sự: bớt người leader thêm, thêm người mới');
+  x=asx(T.admin,L);ok(x.length==3&&!x.some(a=>a.n=='Đỗ Văn Hùng')&&x.find(a=>a.id=='U005').by=='a','danh sách sau khi admin sửa đúng');
+  ok(!call('bootstrap',T.hung||call('login','',{idToken:gtok('hung@gmail.com')}).data.token).data.tasks.some(t=>t.id==L),'người bị bớt không còn thấy nhiệm vụ');
+  r=call('removeAssignee',T.lan,{id:L,userId:'U005'});ok(!r.ok,'leader không bớt người admin vừa thêm qua form sửa');
+  r=call('editTask',T.lan,{...base,as:[U('Bùi Thị Lan').user_id]});ok(!r.ok&&r.code=='FORBIDDEN','leader không dùng được form sửa của admin');
+  r=call('editTask',T.admin,{...base,as:[U('Bùi Thị Lan').user_id,U('Phạm Đức Long').user_id,'U999']});ok(!r.ok,'người không tồn tại bị từ chối');
+  ok(asx(T.admin,L).length==3,'lỗi kiểm tra thì không ghi gì');
+  r=call('editTask',T.admin,{...base,title:'Không đổi người'});ok(r.ok&&asx(T.admin,L).length==3,'không gửi as thì giữ nguyên nhân sự (tương thích bản cũ)');
+  // nhiệm vụ đã hoàn thành
+  const D1=call('bootstrap',T.admin).data.tasks.find(t=>t.st=='Đã hoàn thành');
+  const cur=ctx.Db.all('TaskAssignees').filter(a=>a.task_id==D1.id).map(a=>a.user_id);
+  r=call('editTask',T.admin,{id:D1.id,title:D1.title,desc:D1.desc,pri:D1.pri,keep:D1.files,as:[cur[0]]});ok(!r.ok,'đã hoàn thành: không đổi nhân sự');
+  r=call('editTask',T.admin,{id:D1.id,title:D1.title,desc:D1.desc,pri:D1.pri,keep:D1.files,as:cur});ok(r.ok,'đã hoàn thành: giữ nguyên nhân sự vẫn lưu được');
+}
 console.log(`\nKẾT QUẢ: ${pass} đạt, ${fail} lỗi`);process.exit(fail?1:0);

@@ -22,7 +22,7 @@ const LISTS = {
 
 // Các hành động có ghi dữ liệu: chạy trong khóa để hai người thao tác cùng lúc không làm hỏng dữ liệu.
 const WRITE_ACTIONS = ['readNotifs', 'createTask', 'editTask', 'deleteTask', 'acceptTask', 'progress', 'submitTask',
-  'requestExt', 'decideExt', 'extendTask', 'approveTask', 'requestMore', 'addAssignee', 'sendMsg',
+  'requestExt', 'decideExt', 'extendTask', 'approveTask', 'requestMore', 'addAssignee', 'removeAssignee', 'sendMsg',
   'confirmDoc', 'deleteDoc', 'addTag', 'renameTag', 'deleteTag', 'updateProfile', 'approveSuggestion', 'skipSuggestion', 'addAgency', 'renameAgency', 'deleteAgency'];
 
 // Cơ quan ban hành MẶC ĐỊNH (chỉ dùng để tạo dữ liệu ban đầu trong sheet Agencies; sau đó Hiệu trưởng tự thêm/sửa/xóa trên website).
@@ -48,7 +48,7 @@ class AppError extends Error {
 }
 
 // Số phiên bản backend: mở địa chỉ /exec trên trình duyệt để xem đang chạy bản nào (giúp biết đã Deploy đúng hay chưa).
-const APP_VERSION = 'ai-7';
+const APP_VERSION = 'ai-8';
 function doGet() { return out_({ ok: true, data: 'THCS Ngô Mây API đang chạy, phiên bản ' + APP_VERSION }); }
 
 function doPost(e) {

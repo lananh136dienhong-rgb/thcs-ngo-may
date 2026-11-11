@@ -10,7 +10,7 @@ function routes_() {
     createTask: apiCreateTask_, editTask: apiEditTask_, deleteTask: apiDeleteTask_,
     acceptTask: apiAccept_, progress: apiProgress_, submitTask: apiSubmit_,
     requestExt: apiRequestExt_, decideExt: apiDecideExt_, extendTask: apiExtend_,
-    approveTask: apiApprove_, requestMore: apiRequestMore_, addAssignee: apiAddAssignee_, sendMsg: apiSendMsg_,
+    approveTask: apiApprove_, requestMore: apiRequestMore_, addAssignee: apiAddAssignee_, removeAssignee: apiRemoveAssignee_, sendMsg: apiSendMsg_,
     downloadTaskFile: apiDownloadTaskFile_,
     uploadDoc: apiUploadDoc_, confirmDoc: apiConfirmDoc_, addAgency: apiAddAgency_, renameAgency: apiRenameAgency_, deleteAgency: apiDeleteAgency_, aiProcess: apiAiProcess_, approveSuggestion: apiApproveSuggestion_, skipSuggestion: apiSkipSuggestion_, deleteDoc: apiDeleteDoc_, downloadDoc: apiDownloadDoc_,
     addTag: apiAddTag_, renameTag: apiRenameTag_, deleteTag: apiDeleteTag_, updateProfile: apiUpdateProfile_
@@ -88,6 +88,8 @@ function tasksView_(u, onlyId) {
       docs: (TD[id] || []).filter(function (x) { return docById[x.doc_id] && !yes_(docById[x.doc_id].is_deleted); }).map(function (x) { return { id: x.doc_id, n: docById[x.doc_id].name }; }),
       due: t.due_date, st: t.status, made: String(t.created_at).slice(0, 10), review: t.review_comment || '',
       as: as.map(function (a) { return nm(a.user_id); }),
+      // chi tiết người thực hiện: by = 'a' nếu do Hiệu trưởng (admin) giao, 'l' nếu do leader thêm
+      asx: as.map(function (a) { return { id: a.user_id, n: nm(a.user_id), by: addedByAdmin_(a) ? 'a' : 'l', byN: a.added_by ? nm(a.added_by) : '' }; }),
       acc: as.filter(function (a) { return a.accepted_at; }).map(function (a) { return nm(a.user_id); }),
       files: files.filter(function (f) { return f.kind === 'giao'; }).map(function (f) { return f._n; }), fmap: fmap,
       ext: px ? { to: px.new_due, reason: px.reason, by: nm(px.requested_by) } : null,
@@ -215,6 +217,24 @@ function apiEditTask_(u, r) {
   const t = task_(r.id), keep = r.keep || [];
   const title = str_(r.title, 200, 'Tên nhiệm vụ', true), desc = str_(r.desc, 3000, 'Nội dung chi tiết'), pri = oneOf_(r.pri, LISTS.pri, 'Mức ưu tiên');
   const fls = files_(r.files), at = now_(), refDocs = Array.isArray(r.docs) ? refDocs_(r.docs) : null;
+  // Nhân sự: r.as là danh sách user_id MỚI (nếu gửi lên). Kiểm tra hết trước khi ghi bất cứ thứ gì.
+  let addIds = [], dropRows = [];
+  if (Array.isArray(r.as)) {
+    if (t.status === 'Đã hoàn thành') {
+      const cur = assignees_(t.task_id).map(function (a) { return a.user_id; }).sort().join('|');
+      if (r.as.map(String).slice().sort().join('|') !== cur) throw new AppError('Nhiệm vụ đã hoàn thành, không thể thay đổi nhân sự', 'BAD');
+    }
+    const want = {}, cur = assignees_(t.task_id);
+    r.as.forEach(function (id) { want[String(id)] = 1; });
+    if (!Object.keys(want).length) throw new AppError('Nhiệm vụ phải có ít nhất một người thực hiện', 'BAD');
+    Object.keys(want).forEach(function (id) {
+      if (cur.some(function (a) { return a.user_id === id; })) return;
+      const x = userById_(id);
+      if (!x || !yes_(x.active) || x.app_role === 'admin') throw new AppError('Người được giao không hợp lệ', 'BAD');
+      addIds.push(id);
+    });
+    dropRows = cur.filter(function (a) { return !want[a.user_id]; });
+  }
   // tên hiển thị -> file_id, phải tính giống tasksView_ để khớp với danh sách giao diện đang giữ
   const given = Db.all('TaskFiles').filter(function (f) { return f.task_id === t.task_id; }), fmap = {};
   given.forEach(function (f) { let n = f.name, i = 2; while (fmap[n] && fmap[n] !== f.file_id) n = f.name + ' (' + (i++) + ')'; fmap[n] = f.file_id; f._n = n; });
@@ -230,6 +250,8 @@ function apiEditTask_(u, r) {
   setTask_(t, { title: title, description: desc, priority: pri });
   hist_(t.task_id, u.user_id, 'sua', 'Hiệu trưởng chỉnh sửa nội dung và tài liệu nhiệm vụ');
   notifyMembers_(t.task_id, 'Nhiệm vụ ' + t.task_id + ' đã được cập nhật', '');
+  addIds.forEach(function (id) { addMember_(u, t, userById_(id)); });
+  dropRows.forEach(function (a) { dropMember_(u, t, a); });
   return true;
 }
 // Xóa nhiệm vụ: xóa hẳn mọi dữ liệu của nhiệm vụ trong Google Sheets (chat, lịch sử, tiến độ, kết quả nộp, gia hạn, người được giao,
@@ -352,21 +374,61 @@ function apiRequestExt_(u, r) {
   notify_('ADMIN', u.full_name + ' xin gia hạn ' + t.task_id, t.task_id);
   return true;
 }
-// Chỉ leader đang được giao nhiệm vụ: Phó hiệu trưởng thêm bất kỳ ai, Tổ trưởng chỉ thêm người cùng tổ.
-function apiAddAssignee_(u, r) {
-  const t = task_(r.id);
-  if (u.app_role !== 'leader') throw new AppError('Bạn không có quyền thêm người vào nhiệm vụ', 'FORBIDDEN');
+// ===================== NHIỆM VỤ: NHÂN SỰ =====================
+// Quyền được xét theo VAI TRÒ (cột app_role trong sheet Users), không theo chức vụ:
+//  - admin (Hiệu trưởng): thêm/bớt bất kỳ ai, kể cả người do leader thêm (qua form "Sửa nhiệm vụ").
+//  - leader đang được giao nhiệm vụ: thêm người (Phó hiệu trưởng: bất kỳ ai; leader khác: người cùng tổ chuyên môn),
+//    và bớt người do leader thêm. KHÔNG bớt được người do Hiệu trưởng giao, không tự rút mình khỏi nhiệm vụ.
+//  - staff: không thêm/bớt.
+// Dòng cũ không ghi người thêm (added_by trống) được coi là do Hiệu trưởng giao.
+function addedByAdmin_(a) {
+  if (!a.added_by) return true;
+  const x = userById_(a.added_by);
+  return !x || x.app_role === 'admin';
+}
+function leaderManage_(u, t) {
+  if (u.app_role !== 'leader') throw new AppError('Bạn không có quyền điều chỉnh nhân sự nhiệm vụ', 'FORBIDDEN');
   member_(u, t.task_id);
   if (t.status === 'Đã hoàn thành') throw new AppError('Nhiệm vụ đã hoàn thành', 'BAD');
+}
+function addMember_(u, t, x) {
+  Db.append('TaskAssignees', { row_id: Db.nextId('TaskAssignees', 'row_id', 'A', 3), task_id: t.task_id, user_id: x.user_id, accepted_at: '', added_by: u.user_id, added_at: now_() });
+  const who = isAdmin_(u) ? 'Hiệu trưởng' : (u.position ? u.position + ' ' : '') + u.full_name;
+  hist_(t.task_id, u.user_id, 'them_nguoi', who + ' thêm ' + x.full_name + ' vào nhiệm vụ');
+  notify_(x.user_id, 'Bạn được thêm vào nhiệm vụ ' + t.task_id + ': ' + t.title, t.task_id);
+  if (!isAdmin_(u)) notify_('ADMIN', u.full_name + ' thêm ' + x.full_name + ' vào ' + t.task_id, t.task_id);
+}
+function dropMember_(u, t, a) {
+  Db.removeWhere('TaskAssignees', function (r) { return r.task_id === t.task_id && r.user_id === a.user_id; });
+  const x = userById_(a.user_id), xn = x ? x.full_name : a.user_id;
+  const who = isAdmin_(u) ? 'Hiệu trưởng' : (u.position ? u.position + ' ' : '') + u.full_name;
+  hist_(t.task_id, u.user_id, 'bot_nguoi', who + ' đưa ' + xn + ' ra khỏi nhiệm vụ');
+  notify_(a.user_id, 'Bạn không còn tham gia nhiệm vụ ' + t.task_id + ': ' + t.title, t.task_id);
+  if (!isAdmin_(u)) notify_('ADMIN', u.full_name + ' đưa ' + xn + ' ra khỏi ' + t.task_id, t.task_id);
+}
+function apiAddAssignee_(u, r) {
+  const t = task_(String(r.id));
+  if (isAdmin_(u)) { if (t.status === 'Đã hoàn thành') throw new AppError('Nhiệm vụ đã hoàn thành', 'BAD'); }
+  else leaderManage_(u, t);
   const x = userById_(String(r.userId));
   if (!x || !yes_(x.active) || x.app_role === 'admin') throw new AppError('Người được thêm không hợp lệ', 'BAD');
-  if (u.position === 'Tổ trưởng chuyên môn' && x.department !== u.department) throw new AppError('Tổ trưởng chỉ được thêm nhân sự cùng tổ chuyên môn', 'FORBIDDEN');
-  if (u.position !== 'Tổ trưởng chuyên môn' && u.position !== 'Phó hiệu trưởng') throw new AppError('Bạn không có quyền thêm người vào nhiệm vụ', 'FORBIDDEN');
+  if (!isAdmin_(u) && u.position !== 'Phó hiệu trưởng' && x.department !== u.department) throw new AppError('Bạn chỉ được thêm nhân sự cùng tổ chuyên môn (' + u.department + ')', 'FORBIDDEN');
   if (assignees_(t.task_id).some(function (a) { return a.user_id === x.user_id; })) throw new AppError('Người này đã có trong nhiệm vụ', 'BAD');
-  Db.append('TaskAssignees', { row_id: Db.nextId('TaskAssignees', 'row_id', 'A', 3), task_id: t.task_id, user_id: x.user_id, accepted_at: '', added_by: u.user_id, added_at: now_() });
-  hist_(t.task_id, u.user_id, 'them_nguoi', u.position + ' ' + u.full_name + ' thêm ' + x.full_name + ' vào nhiệm vụ');
-  notify_(x.user_id, 'Bạn được thêm vào nhiệm vụ ' + t.task_id + ': ' + t.title, t.task_id);
-  notify_('ADMIN', u.full_name + ' thêm ' + x.full_name + ' vào ' + t.task_id, t.task_id);
+  addMember_(u, t, x);
+  return true;
+}
+function apiRemoveAssignee_(u, r) {
+  const t = task_(String(r.id));
+  if (isAdmin_(u)) { if (t.status === 'Đã hoàn thành') throw new AppError('Nhiệm vụ đã hoàn thành', 'BAD'); }
+  else leaderManage_(u, t);
+  const all = assignees_(t.task_id), a = all.find(function (x) { return x.user_id === String(r.userId); });
+  if (!a) throw new AppError('Người này không có trong nhiệm vụ', 'BAD');
+  if (!isAdmin_(u)) {
+    if (a.user_id === u.user_id) throw new AppError('Bạn không thể tự rút khỏi nhiệm vụ. Hãy liên hệ Hiệu trưởng.', 'FORBIDDEN');
+    if (addedByAdmin_(a)) throw new AppError('Không thể bớt người do Hiệu trưởng phân công', 'FORBIDDEN');
+  }
+  if (all.length <= 1) throw new AppError('Nhiệm vụ phải có ít nhất một người thực hiện', 'BAD');
+  dropMember_(u, t, a);
   return true;
 }
 function apiSendMsg_(u, r) {
