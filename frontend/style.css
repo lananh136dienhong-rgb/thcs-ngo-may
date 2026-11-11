@@ -74,3 +74,5 @@ body.busy::before{content:"";position:fixed;top:0;left:0;height:3px;width:100%;z
 .aitag{display:inline-block;font-size:11px;font-weight:800;color:var(--bt);background:var(--hi);border-radius:99px;padding:2px 8px}
 .tr select{max-width:100%}
 .upw{border-top:1px solid var(--line)}.upw:first-of-type{border-top:0}.upd{padding:0 6px 14px;font-size:13px;line-height:1.65;min-width:1000px}.upd .sub{margin:0}
+
+.file.ld{opacity:.6;cursor:progress}.file.ld::after{content:'';width:10px;height:10px;border:2px solid var(--mut);border-top-color:transparent;border-radius:50%;animation:dlspin .8s linear infinite;align-self:center}@keyframes dlspin{to{transform:rotate(360deg)}}

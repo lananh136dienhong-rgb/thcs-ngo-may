@@ -28,7 +28,7 @@ function apiUploadDoc_(u, r) {
   const dupMsg = 'Văn bản này đã tồn tại (trùng tên và dung lượng). Hãy chọn tệp khác.';
   if (docDup_(fl.name, size)) throw new AppError(dupMsg, 'BAD');
   // Tệp nằm ở thư mục tạm cho tới khi Hiệu trưởng xác nhận phân loại (confirmDoc) thì mới chuyển vào thư mục chính thức.
-  const file = stagingDir_().createFile(Utilities.newBlob(fl.bytes, fl.mime, 'tmp_' + slug_(fl.name)));
+  const file = share_(stagingDir_().createFile(Utilities.newBlob(fl.bytes, fl.mime, 'tmp_' + slug_(fl.name))));
   let id;
   try {
     withLock_(function () {

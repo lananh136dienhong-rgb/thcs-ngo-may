@@ -56,7 +56,7 @@ function userNames_() {
   return name;
 }
 function docView_(d, admin, name, u) {
-  return { id: d.doc_id, n: d.name, sz: d.size_bytes, d: String(d.uploaded_at).slice(0, 10), by: name[d.uploaded_by] || '', k: d.tag || '', ok: yes_(d.reviewed) ? 1 : 0, ag: code_(d.agency), no: d.doc_no || '', sm: d.summary || '', ai: aiDocView_(d, admin), mine: d.uploaded_by === u.user_id ? 1 : 0 };
+  return { id: d.doc_id, n: d.name, sz: d.size_bytes, d: String(d.uploaded_at).slice(0, 10), by: name[d.uploaded_by] || '', k: d.tag || '', ok: yes_(d.reviewed) ? 1 : 0, g: d.drive_file_id, ag: code_(d.agency), no: d.doc_no || '', sm: d.summary || '', ai: aiDocView_(d, admin), mine: d.uploaded_by === u.user_id ? 1 : 0 };
 }
 function docsView_(u) {
   const admin = isAdmin_(u), name = userNames_();
@@ -84,14 +84,15 @@ function tasksView_(u, onlyId) {
     const px = (X[id] || []).filter(function (x) { return x.status === 'Chờ xử lý'; }).pop();
     return {
       id: id, title: t.title, desc: t.description, pri: t.priority, cs: t.campus, to: t.department, kind: t.target_type,
-      src: t.src_doc ? (docById[t.src_doc] && !yes_(docById[t.src_doc].is_deleted) ? { id: t.src_doc, n: docById[t.src_doc].name } : { id: t.src_doc, n: '', gone: 1 }) : null,
-      docs: (TD[id] || []).filter(function (x) { return docById[x.doc_id] && !yes_(docById[x.doc_id].is_deleted); }).map(function (x) { return { id: x.doc_id, n: docById[x.doc_id].name }; }),
+      src: t.src_doc ? (docById[t.src_doc] && !yes_(docById[t.src_doc].is_deleted) ? { id: t.src_doc, n: docById[t.src_doc].name, g: docById[t.src_doc].drive_file_id } : { id: t.src_doc, n: '', gone: 1 }) : null,
+      docs: (TD[id] || []).filter(function (x) { return docById[x.doc_id] && !yes_(docById[x.doc_id].is_deleted); }).map(function (x) { return { id: x.doc_id, n: docById[x.doc_id].name, g: docById[x.doc_id].drive_file_id }; }),
       due: t.due_date, st: t.status, made: String(t.created_at).slice(0, 10), review: t.review_comment || '',
       as: as.map(function (a) { return nm(a.user_id); }),
       // chi tiết người thực hiện: by = 'a' nếu do Hiệu trưởng (admin) giao, 'l' nếu do leader thêm
       asx: as.map(function (a) { return { id: a.user_id, n: nm(a.user_id), by: addedByAdmin_(a) ? 'a' : 'l', byN: a.added_by ? nm(a.added_by) : '' }; }),
       acc: as.filter(function (a) { return a.accepted_at; }).map(function (a) { return nm(a.user_id); }),
       files: files.filter(function (f) { return f.kind === 'giao'; }).map(function (f) { return f._n; }), fmap: fmap,
+      fg: files.reduce(function (m, f) { m[f._n] = f.drive_file_id; return m; }, {}),   // tên hiển thị -> mã tệp Drive (tải thẳng)
       ext: px ? { to: px.new_due, reason: px.reason, by: nm(px.requested_by) } : null,
       extH: (X[id] || []).filter(function (x) { return x.status === 'Đồng ý' || x.status === 'Gia hạn trực tiếp'; })
         .map(function (x) { return { old: x.old_due, nw: x.new_due, why: x.reason, by: nm(x.decided_by || x.requested_by), at: String(x.decided_at || x.requested_at).slice(0, 10) }; }),
@@ -156,7 +157,15 @@ function child_(parent, name) {
 function saveDrive_(folderProp, sub, fl, prefix) {
   const root = DriveApp.getFolderById(prop_(folderProp));
   const dir = sub ? child_(root, sub) : root;
-  return dir.createFile(Utilities.newBlob(fl.bytes, fl.mime, prefix + slug_(fl.name))).getId();
+  return share_(dir.createFile(Utilities.newBlob(fl.bytes, fl.mime, prefix + slug_(fl.name)))).getId();
+}
+// Chia sẻ tệp dạng "bất kỳ ai có đường link đều xem được" để website tải THẲNG từ Google Drive (nhanh hơn nhiều so với tải qua Apps Script).
+// Mã tệp Drive chỉ được gửi cho người có quyền xem tài liệu đó. Nếu tài khoản Google chặn chia sẻ link, tệp vẫn tải được theo cách cũ.
+function share_(file) {
+  try {
+    if (file.getSharingAccess() !== DriveApp.Access.ANYONE_WITH_LINK) file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  } catch (e) { console.error('Không chia sẻ được tệp ' + file.getId() + ': ' + e); }
+  return file;
 }
 function stamp_(at) { return at.replace(/[-:]/g, '').replace('T', '-').slice(0, 13); }
 function saveTaskFiles_(taskId, kind, fls, userId, at) {

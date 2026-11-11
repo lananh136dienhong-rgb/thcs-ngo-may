@@ -78,12 +78,13 @@ function mkFolder(name) {
     getFoldersByName: n => { const m = f.kids.filter(k => k.name === n); let i = 0; return { hasNext: () => i < m.length, next: () => m[i++] }; },
     getFolders: () => { let i = 0; return { hasNext: () => i < f.kids.length, next: () => f.kids[i++] }; },
     createFolder: n => { const k = mkFolder(n); k.id = 'D' + (++fid); k.parent = f; files[k.id] = k; f.kids.push(k); return k; },
-    createFile: blob => { const id = 'F' + (++fid); files[id] = { id, blob, trashed: false, parent: f, getId: () => id, getBlob: () => blob, setTrashed(v) { this.trashed = v; }, setName(n) { this.blob.setName(n); return this; }, moveTo(d) { this.parent = d; return this; } }; return files[id]; },
+    createFile: blob => { const id = 'F' + (++fid); files[id] = { id, blob, trashed: false, parent: f, getId: () => id, getBlob: () => blob, setTrashed(v) { this.trashed = v; }, setName(n) { this.blob.setName(n); return this; }, moveTo(d) { this.parent = d; return this; }, access: 'PRIVATE', getSharingAccess() { return this.access; }, setSharing(a, p) { this.access = a; this.perm = p; return this; } }; return files[id]; },
     getId: () => f.id, getUrl: () => 'u'
   };
   return f;
 }
 const DriveApp = {
+  Access: { ANYONE_WITH_LINK: 'ANYONE_WITH_LINK', PRIVATE: 'PRIVATE' }, Permission: { VIEW: 'VIEW' },
   createFolder: n => { const f = mkFolder(n); f.id = 'D' + (++fid); files[f.id] = f; return f; },
   getFolderById: id => files[id], getFileById: id => files[id]
 };

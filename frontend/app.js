@@ -5,7 +5,7 @@
  *  - Các hàm vẽ giao diện (aOv, sOv, dtl, modal, draw...) đọc các biến này và dựng HTML.
  *  - Mọi thao tác ghi dữ liệu đi qua act(...) → API.call → backend kiểm tra quyền → tải lại dữ liệu → vẽ lại.
  */
-let ME='',TD='',TAGS=[],T=[],D=[],N=[],PPL=[],SUG=[],AGS=[],TF={},AIOK=0,BV='';const FV='10';
+let ME='',TD='',TAGS=[],T=[],D=[],N=[],PPL=[],SUG=[],AGS=[],TF={},AIOK=0,BV='';const FV='12';
 const PR={a:null,s:null,l:null};   // hồ sơ người đang đăng nhập (dùng chung cho 3 vai trò)
 const $=s=>document.querySelector(s),fd=i=>i.split('-').reverse().join('/'),ini=n=>n.split(' ').slice(-2).map(w=>w[0]).join('');
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -130,11 +130,11 @@ return `<div class="hd"><div><h1>Tổng quan</h1><div class="sub">Công việc c
 function sMo(){const f=S.f,L=flt(mine(),f);return `<div class="hd"><div><h1>Nhiệm vụ</h1><div class="sub">Tất cả nhiệm vụ được giao cho bạn</div></div></div>
 <div class="fl" data-f2><input data-k="q" placeholder="Tìm theo mã hoặc tên nhiệm vụ" value="${esc(f.q)}" style="min-width:240px"><select data-k="st">${opt([...ST,'Sắp đến hạn','Quá hạn','Yêu cầu gia hạn'],f.st,'Mọi trạng thái')}</select><select data-k="cs">${opt(['Trường chính','Phân hiệu'],f.cs,'Mọi cơ sở')}</select></div><div class="card">${rows(L,'NGƯỜI GIAO')}</div>`}
 function nt(){const r=rk();return `<h1>Thông báo</h1><p class="sub">${r=='a'?'Cập nhật trạng thái và tin nhắn từ nhân viên.':'Nhiệm vụ mới, phản hồi và kết quả phê duyệt.'}</p><div class="card">${nots(r)}</div>`}
-/* Tài liệu giao: gộp tệp đính kèm, văn bản từ kho và văn bản nguồn vào một danh sách */
-const tdocs=t=>{const kd=[...(t.src&&!t.src.gone?[t.src]:[]),...t.docs.filter(d=>!t.src||d.id!=t.src.id)];
-const it=[...t.files.map(f=>`<div><span class="file" data-a="dl" data-v="${esc(f)}" title="Tải xuống">📎 ${esc(f)}</span></div>`),
-...kd.map(d=>`<div><span style="display:inline-block;margin:3px 6px 3px 0;font-size:13px">📄 <b>${esc(d.id)}</b> · ${esc(d.n)}</span><button type="button" data-a="findsrc" data-v="${esc(d.id)}" style="border:0;background:none;padding:0 4px;font:inherit;font-size:12px;font-weight:700;color:var(--blue);cursor:pointer;white-space:nowrap">Tìm trong kho ›</button></div>`),
-...(t.src&&t.src.gone?[`<div class="sub">${esc(t.src.id)} (văn bản đã bị xóa khỏi kho)</div>`]:[])];
+/* Tài liệu liên quan: tệp Hiệu trưởng tải lên, văn bản thêm từ kho và văn bản nguồn (AI tạo nhiệm vụ) – bấm tên để tải */
+const tdocs=t=>{const kd=[...(t.src&&!t.src.gone?[t.src]:[]),...t.docs.filter(d=>!t.src||d.id!=t.src.id)],ld=k=>DLP.has(k)?' ld':'';
+const it=[...t.files.map(f=>`<span class="file${ld('f:'+t.fmap[f])}" data-a="dl" data-v="${esc(f)}" data-dk="f:${esc(t.fmap[f])}" title="Bấm để tải xuống">📎 ${esc(f)}</span>`),
+...kd.map(d=>`<span class="file${ld('d:'+d.id)}" data-a="dldoc" data-v="${esc(d.id)}" data-g="${esc(d.g||'')}" data-dk="d:${esc(d.id)}" title="Bấm để tải xuống">📎 ${esc(d.id)} · ${esc(d.n)}</span>`),
+...(t.src&&t.src.gone?[`<span class="sub">${esc(t.src.id)} (văn bản đã bị xóa khỏi kho)</span>`]:[])];
 return it.join('')||'<span class="sub">Không có</span>'};
 /* ---------- DETAIL ---------- */
 function dtl(){const t=find(S.tid),a=S.role=='a',sub=t.subs.at(-1),pend=t.acc.length<t.as.length;let act='';
@@ -151,7 +151,7 @@ act=(!t.acc.includes(ME)?`<button class="btn t" data-a="acc">Xác nhận tiếp 
 <div class="sub" style="margin-top:8px">${t.ext?'Yêu cầu gia hạn đang chờ Hiệu trưởng xem xét.':t.st=='Chờ duyệt'?`Đã có kết quả được nộp (${esc(sub.by)}), đang chờ duyệt. Mọi thành viên đều có thể nộp thêm hoặc nộp lại.`:!t.acc.includes(ME)?'Hãy xác nhận tiếp nhận trước khi cập nhật tiến độ hoặc nộp kết quả.':'Cập nhật tiến độ không đồng nghĩa với hoàn thành. Việc hoàn thành do Hiệu trưởng xác nhận.'}</div>`}else act='<span class="sub">Nhiệm vụ đã hoàn thành, không còn thao tác.</span>'}
 const fl=a=>a.map(f=>`<span class="file" data-a="dl" data-v="${esc(f)}">📎 ${esc(f)}</span>`).join('')||'<span class="sub">Không có</span>';
 return `<div class="hd"><div><button class="btn" data-a="back">← Quay lại</button><h1 style="margin-top:12px">${esc(t.title)}</h1><div><span class="id">${t.id}</span> ${bds(t)}<span class="bd ${t.pri=='Cao'?'r':'a'}">Ưu tiên ${t.pri.toLowerCase()}</span></div></div></div>
-<div class="dt"><div class="stk"><div class="card"><p style="margin-top:0">${esc(t.desc)}</p><div class="kv"><span>Người giao</span><span>Hiệu trưởng</span><span>Người thực hiện</span><span>${t.as.map(esc).join(', ')}</span><span>Đã tiếp nhận</span><span>${t.acc.map(esc).join(', ')||'Chưa có'}${pend&&t.acc.length?` (chưa: ${t.as.filter(x=>!t.acc.includes(x)).map(esc).join(', ')})`:''}</span><span>Cơ sở · Tổ</span><span>${t.cs} · ${t.to}</span><span>Ngày giao</span><span>${fd(t.made)}</span><span>Hạn hoàn thành</span><b class="${od(t)?'late':''}">${fd(t.due)}</b><span>Tài liệu giao</span><span>${tdocs(t)}</span></div></div>
+<div class="dt"><div class="stk"><div class="card"><p style="margin-top:0">${esc(t.desc)}</p><div class="kv"><span>Người giao</span><span>Hiệu trưởng</span><span>Người thực hiện</span><span>${t.as.map(esc).join(', ')}</span><span>Đã tiếp nhận</span><span>${t.acc.map(esc).join(', ')||'Chưa có'}${pend&&t.acc.length?` (chưa: ${t.as.filter(x=>!t.acc.includes(x)).map(esc).join(', ')})`:''}</span><span>Cơ sở · Tổ</span><span>${t.cs} · ${t.to}</span><span>Ngày giao</span><span>${fd(t.made)}</span><span>Hạn hoàn thành</span><b class="${od(t)?'late':''}">${fd(t.due)}</b><span>Tài liệu liên quan</span><span>${tdocs(t)}</span></div></div>
 <div class="card"><h2>Hành động</h2><div style="margin-top:10px">${act}</div></div>
 ${add}<div class="card"><h2>Tài liệu và kết quả đã nộp</h2>${t.subs.length?t.subs.map(s=>`<div class="hs"><small>${fd(s.at)} · ${esc(s.by)}</small>${esc(s.text)}<div>${fl(s.files)}</div></div>`).join(''):'<p class="sub">Chưa có lượt nộp nào.</p>'}${t.review?`<p class="sub">Nhận xét gần nhất: ${esc(t.review)}</p>`:''}</div>
 <div class="card"><h2>Lịch sử</h2><div style="height:8px"></div>${[...t.hist.map(h=>[h[0],h[1]]),...t.prog.map(p=>[p.at,`${p.by} cập nhật tiến độ: ${p.done}. Kết quả: ${p.res}. Còn lại: ${p.left||'—'}`]),...t.extH.map(e=>[e.at,`Gia hạn: ${fd(e.old)} → ${fd(e.nw)} (${e.why}; duyệt: ${e.by})`])].sort((x,y)=>x[0]<y[0]?-1:1).map(h=>`<div class="hs"><small>${fd(h[0])}</small>${esc(h[1])}</div>`).join('')}</div></div>
@@ -161,7 +161,7 @@ function modal(){const t=find(S.tid),fi='<label>Tải tệp minh chứng</label>
 if(S.m=='prog')h=`<h2>Cập nhật tiến độ</h2><div class="sub">${t.id} · ${esc(t.title)} · Người thực hiện: ${ME}</div><form class="fm" data-f="prog"><label>Công việc đã thực hiện</label><textarea name="done" required></textarea><label>Kết quả đạt được</label><textarea name="res" required></textarea><label>Công việc còn lại, khó khăn</label><textarea name="left"></textarea>${fi}<button class="btn t" style="width:100%;margin-top:14px">Gửi cập nhật</button></form>`;
 if(S.m=='sub')h=`<h2>Nộp kết quả</h2><div class="sub">${t.id} · Mọi thành viên (${t.as.length} người) đều có quyền nộp như nhau</div><form class="fm" data-f="sub"><label>Báo cáo hoàn thành</label><textarea name="text" required></textarea>${fi.replace('minh chứng','sản phẩm')}<label>Ghi chú cho người kiểm tra</label><textarea name="nt" style="min-height:50px"></textarea><button class="btn t" style="width:100%;margin-top:14px">Xác nhận nộp</button></form>`;
 if(S.m=='ext')h=`<h2>Xin gia hạn</h2><form class="fm" data-f="ext"><label>Thời hạn hiện tại</label><div>${fd(t.due)}</div><label>Thời hạn đề nghị mới</label><input type="date" name="to" min="${t.due}" required><label>Lý do đề nghị gia hạn</label><textarea name="why" required></textarea><button class="btn t" style="width:100%;margin-top:14px">Gửi đề nghị</button></form>`;
-if(S.m=='edit')h=`<h2>Sửa nhiệm vụ</h2><form class="fm" data-f="edit"><label>Tên</label><input name="title" value="${esc(t.title)}" required><label>Nội dung</label><textarea name="desc">${esc(t.desc)}</textarea><label>Mức ưu tiên</label><select name="pri">${opt(['Thấp','Trung bình','Cao'],t.pri)}</select><label>Nhân sự thực hiện</label>${t.st=='Đã hoàn thành'?'<div class="sub">Nhiệm vụ đã hoàn thành, không thể thay đổi nhân sự.</div>':''}<div id="eac"></div>${t.st=='Đã hoàn thành'?'':'<input id="es" type="search" placeholder="Tìm nhân sự để thêm theo tên, tổ, chức vụ…" autocomplete="off" style="width:100%;margin-top:6px"><div id="esg" class="sg"></div>'}<label>Tài liệu giao cho nhiệm vụ</label><div id="efl">${efh()}</div><input type="file" name="fl" multiple style="margin-top:6px"><label>Văn bản từ Kho văn bản</label>${docPick()}<button class="btn t" style="width:100%;margin-top:14px">Lưu thay đổi</button></form>`;
+if(S.m=='edit')h=`<h2>Sửa nhiệm vụ</h2><form class="fm" data-f="edit"><label>Tên</label><input name="title" value="${esc(t.title)}" required><label>Nội dung</label><textarea name="desc">${esc(t.desc)}</textarea><label>Mức ưu tiên</label><select name="pri">${opt(['Thấp','Trung bình','Cao'],t.pri)}</select><label>Nhân sự thực hiện</label>${t.st=='Đã hoàn thành'?'<div class="sub">Nhiệm vụ đã hoàn thành, không thể thay đổi nhân sự.</div>':''}<div id="eac"></div>${t.st=='Đã hoàn thành'?'':'<input id="es" type="search" placeholder="Tìm nhân sự để thêm theo tên, tổ, chức vụ…" autocomplete="off" style="width:100%;margin-top:6px"><div id="esg" class="sg"></div>'}<label>Tài liệu liên quan (tệp tải lên)</label><div id="efl">${efh()}</div><input type="file" name="fl" multiple style="margin-top:6px"><label>Văn bản từ Kho văn bản</label>${docPick()}<button class="btn t" style="width:100%;margin-top:14px">Lưu thay đổi</button></form>`;
 if(S.m=='me'||S.m=='pe'){const q=PR[S.role],p=[q.n,q.y,q.ad,q.r,q.t,q.c],K=['Họ và tên','Năm sinh','Địa chỉ','Chức vụ','Tổ chuyên môn','Cơ sở'];
 h=S.m=='me'?`<h2>Hồ sơ cá nhân</h2><div class="sub" style="margin-bottom:12px">Lấy từ tài khoản đã đăng ký với nhà trường.</div><div class="kv">${K.map((k,i)=>`<span>${k}</span><span>${esc(p[i])}</span>`).join('')}</div><button class="btn o" style="margin-top:12px;width:100%" data-m="pe">Chỉnh sửa thông tin</button>`
 :`<h2>Chỉnh sửa hồ sơ</h2><form class="fm" data-f="pe"><label>Họ và tên</label><input name="n" value="${esc(q.n)}" required><div class="row"><div><label>Năm sinh</label><input name="y" type="number" min="1940" max="2010" value="${esc(q.y)}"></div><div><label>Chức vụ</label>${S.role=='a'?`<input name="r" value="${esc(q.r)}" required>`:`<select name="r" ${S.role=='a'?'':'disabled'}>${opt(['Giáo viên','Tổ trưởng chuyên môn','Phó hiệu trưởng','Nhân viên'],q.r)}</select>`}</div></div><label>Địa chỉ</label><input name="ad" value="${esc(q.ad)}"><div class="row"><div><label>Tổ chuyên môn</label><select name="t" ${S.role=='a'?'':'disabled'}>${opt(TO,q.t)}</select></div><div><label>Cơ sở</label><select name="c" ${S.role=='a'?'':'disabled'}>${opt(['Trường chính','Phân hiệu'],q.c)}</select></div></div>${S.role=='a'?'':'<div class="sub" style="margin-top:8px">Chức vụ, tổ chuyên môn và cơ sở do Hiệu trưởng cập nhật.</div>'}<button class="btn t" style="width:100%;margin-top:14px">Lưu hồ sơ</button></form>`}
@@ -174,7 +174,7 @@ $('#root').innerHTML=`<div class="app"><aside class="sb"><div class="logo"><i><s
 <div class="mn"><div class="top"><span>🔍</span><input id="gs" placeholder="Tìm mã nhiệm vụ, văn bản, người thực hiện…" value=""><span class="sub who">${esc(u.r)}</span><button class="btn" data-a="logout">Đăng xuất</button><button class="ibtn" data-a="go" data-p="nt" aria-label="Thông báo">🔔${nl(rk()).some(n=>n.n)?'<b></b>':''}</button></div><main>${v}</main></div></div>${S.m?modal():''}`;
 if(a&&(p=='cr'||(p=='ai'&&S.sug))&&!S.tid)paintPick();paintDocs();paintEa();const m=$('#ms');if(m)m.scrollTop=sc??m.scrollHeight}
 function toast(x){const e=document.createElement('div');e.className='tst';e.textContent=x;document.body.append(e);setTimeout(()=>e.remove(),2200)}
-const go=(p,t)=>{if(S.page=='nt'&&p!='nt')markRead();S.page=p;S.tid=t||null;S.m=null;S.err='';S.edit=null;if(p!='ai')S.sug=null;if(p!='cr'&&p!='ai')S.dp=[];scrollTo(0,0);draw();if(!editing())refreshSoon()}
+const go=(p,t)=>{if(S.page=='nt'&&p!='nt')markRead();S.page=p;S.tid=t||null;S.m=null;S.err='';S.edit=null;if(p!='ai')S.sug=null;if(p!='cr'&&p!='ai')S.dp=[];scrollTo(0,0);draw();if(t)API.warm();if(!editing())refreshSoon()}
 const editing=()=>S.page=='cr'||(S.page=='ai'&&!!S.sug);;
 // Mỗi khi chuyển trang, lấy dữ liệu mới nhất ở nền rồi vẽ lại (trừ khi người dùng đang nhập liệu).
 let lastList=Date.now();
@@ -223,8 +223,20 @@ async function readFiles(list){const out=[];for(const f of list){
  out.push({name:f.name,mime:f.type||'application/octet-stream',data})}return out}
 function b64blob(b64,mime){const bin=atob(b64),u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);return new Blob([u],{type:mime})}
 function saveFile(name,data){const b=data instanceof Blob?data:new Blob([data]),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;document.body.append(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);toast('Đã lưu '+name)}
-async function dlDoc(id){try{toast('Đang tải…');const f=await API.call('downloadDoc',{docId:id});saveFile(f.name,b64blob(f.data,f.mime))}catch(e){toast(e.message)}}
-async function dlTask(t,name){try{const fid=t?.fmap?.[name];if(!fid)return;toast('Đang tải…');const f=await API.call('downloadTaskFile',{fileId:fid});saveFile(name,b64blob(f.data,f.mime))}catch(e){toast(e.message)}}
+/* Tải tệp: mỗi tệp chỉ gửi MỘT yêu cầu dù bấm nhiều lần; tệp đã tải được giữ trong bộ nhớ của tab (tối đa ~60 MB) nên lần sau mở ngay. */
+const DLC=new Map(),DLP=new Map();let dlBytes=0;
+const dlMark=(k,on)=>document.querySelectorAll(`[data-dk="${CSS.escape(k)}"]`).forEach(e=>e.classList.toggle('ld',on));
+async function dlRun(k,name,fetcher){if(DLC.has(k)){const c=DLC.get(k);return saveFile(c.name,c.blob)}
+ if(DLP.has(k))return toast('Đang tải '+name+'…');
+ const w=document.createElement('div');w.className='tst';w.textContent='Đang tải '+name+'…';document.body.append(w);dlMark(k,true);
+ const pr=(async()=>{try{const f=await fetcher(),blob=b64blob(f.data,f.mime);
+  if(blob.size<20*1048576){DLC.set(k,{name:f.name||name,blob});dlBytes+=blob.size;while(dlBytes>60*1048576&&DLC.size){const [k0,v0]=DLC.entries().next().value;DLC.delete(k0);dlBytes-=v0.blob.size}}
+  saveFile(f.name||name,blob)}catch(e){if(e.code=='AUTH')return logout(true);toast(e.message||'Tải không thành công, vui lòng thử lại')}
+  finally{w.remove();DLP.delete(k);dlMark(k,false)}})();DLP.set(k,pr);return pr}
+// Tải THẲNG từ Google Drive (tệp đã được chia sẻ link): không đi qua Apps Script nên nhanh. Không có mã Drive thì tải theo cách cũ.
+function dlDrive(g,name){const a=document.createElement('a');a.href='https://drive.google.com/uc?export=download&id='+encodeURIComponent(g);a.target='_blank';a.rel='noopener';document.body.append(a);a.click();a.remove();toast('Đang tải '+name+'…')}
+function dlDoc(id,g){const d=D.find(x=>x.id==id),n=d?.n||id;g=g||d?.g;if(g)return dlDrive(g,n);return dlRun('d:'+id,n,()=>API.call('downloadDoc',{docId:id}))}
+function dlTask(t,name){const fid=t?.fmap?.[name];if(!fid)return;if(t.fg?.[name])return dlDrive(t.fg[name],name);return dlRun('f:'+fid,name,()=>API.call('downloadTaskFile',{fileId:fid}))}
 
 // AI đọc văn bản ở nền: tải lên xong trả về ngay, rồi website gọi aiProcess cho từng văn bản đang xếp hàng (lần lượt, không chặn thao tác khác).
 function runAi(id,retry){RUN.add(id);if(retry){toast('AI đang đọc văn bản…');if(!S.m&&!dirty())draw()}
@@ -249,7 +261,7 @@ if(a=='tab'){S.tab=v;return draw()}
 if(a=='logout')return logout();
 if(a=='pick'){S.pick.push(v);$('#ps').value='';return paintPick()}if(a=='unpick'){S.pick=S.pick.filter(x=>x!=v);return paintPick()}
 if(a=='dl')return dlTask(t,v);
-if(a=='dldoc')return dlDoc(v);if(a=='dpick'){S.dp.push(v);$('#ds').value='';return paintDocs()}if(a=='dunpick'){S.dp=S.dp.filter(x=>x!=v);return paintDocs()}
+if(a=='dldoc')return dlDoc(v,b.dataset.g);if(a=='dpick'){S.dp.push(v);$('#ds').value='';return paintDocs()}if(a=='dunpick'){S.dp=S.dp.filter(x=>x!=v);return paintDocs()}
 if(a=='acc')return act('acceptTask',{id},'Đã tiếp nhận nhiệm vụ');
 if(a=='approve')return act('approveTask',{id},'Đã duyệt hoàn thành');
 if(a=='more'){const c=$('#cm').value.trim();if(!c)return toast('Hãy nhập nhận xét trước khi yêu cầu bổ sung');return act('requestMore',{id,comment:c},'Đã gửi yêu cầu bổ sung')}

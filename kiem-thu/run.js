@@ -368,4 +368,15 @@ console.log('\n== 18. Điều chỉnh nhân sự theo vai trò (leader / admin)'
   r=call('editTask',T.admin,{id:D1.id,title:D1.title,desc:D1.desc,pri:D1.pri,keep:D1.files,as:[cur[0]]});ok(!r.ok,'đã hoàn thành: không đổi nhân sự');
   r=call('editTask',T.admin,{id:D1.id,title:D1.title,desc:D1.desc,pri:D1.pri,keep:D1.files,as:cur});ok(r.ok,'đã hoàn thành: giữ nguyên nhân sự vẫn lưu được');
 }
+console.log('\n== 19. Chia sẻ link để tải thẳng từ Drive');
+{
+  const nid=call('createTask',T.admin,{title:'Chia sẻ',due:'2026-12-31',assignees:['U010'],files:[{name:'a.pdf',data:b64('A')}]}).data.id;
+  const tk=call('bootstrap',T.lan).data.tasks.find(t=>t.id==nid);
+  ok(tk.fg&&tk.fg['a.pdf']&&files[tk.fg['a.pdf']].access=='ANYONE_WITH_LINK','tệp giao mới được chia sẻ link, mã Drive gửi về giao diện');
+  const anyDoc=call('bootstrap',T.admin).data.docs[0];ok(anyDoc&&anyDoc.g,'văn bản trong kho có mã Drive');
+  const fid=ctx.Db.all('TaskFiles')[0].drive_file_id;files[fid].access='PRIVATE';
+  const r2=ctx.shareAllFiles();ok(r2.done>=1&&files[fid].access=='ANYONE_WITH_LINK','shareAllFiles chia sẻ tệp cũ');
+  ok(ctx.shareAllFiles().done==0,'chạy lại shareAllFiles thì bỏ qua tệp đã chia sẻ');
+  ok(!call('bootstrap',T.anh).data.tasks.some(t=>t.id==nid),'người ngoài nhiệm vụ không nhận được mã tệp');
+}
 console.log(`\nKẾT QUẢ: ${pass} đạt, ${fail} lỗi`);process.exit(fail?1:0);

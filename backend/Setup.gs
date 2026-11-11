@@ -126,8 +126,29 @@ function upgrade() {
   Db.refresh('Documents');
   Db.all('Documents').forEach(function (d) { if (yes_(d.reviewed) && !d.ai_status) Db.update('Documents', d._row, { ai_status: 'off' }); });
   child_(DriveApp.getFolderById(prop_('FOLDER_VANBAN')), STAGING);
+  const sh = shareAllFiles();
+  if (sh.done) log.push('Chia sẻ link cho ' + sh.done + ' tệp cũ để tải nhanh' + (sh.fail ? ' (' + sh.fail + ' tệp lỗi, xem Nhật ký)' : ''));
   Logger.log(log.length ? 'Đã nâng cấp:\n' + log.join('\n') : 'Hệ thống đã ở bản mới nhất, không có gì cần thay đổi.');
   Logger.log('Tiếp theo: đặt GEMINI_API_KEY trong Script properties, chạy aiSelfTest() rồi installAiTrigger().');
+}
+
+// Chia sẻ link (chỉ xem) cho mọi tệp đã có trong hệ thống để website tải thẳng từ Drive.
+// upgrade() tự gọi hàm này; có thể chạy lại nhiều lần, tệp đã chia sẻ sẽ được bỏ qua.
+function shareAllFiles() {
+  const ids = [], seen = {}, r = { done: 0, fail: 0 };
+  Db.refresh('TaskFiles'); Db.refresh('Documents');
+  Db.all('TaskFiles').forEach(function (f) { if (f.drive_file_id) ids.push(f.drive_file_id); });
+  Db.all('Documents').forEach(function (d) { if (d.drive_file_id && !yes_(d.is_deleted)) ids.push(d.drive_file_id); });
+  ids.forEach(function (id) {
+    if (seen[id]) return; seen[id] = 1;
+    try {
+      const f = DriveApp.getFileById(id);
+      if (f.getSharingAccess() === DriveApp.Access.ANYONE_WITH_LINK) return;
+      f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); r.done++;
+    } catch (e) { r.fail++; console.error('Không chia sẻ được tệp ' + id + ': ' + e); }
+  });
+  Logger.log('Đã chia sẻ link cho ' + r.done + ' tệp' + (r.fail ? ', ' + r.fail + ' tệp lỗi' : '') + '.');
+  return r;
 }
 
 // Dọn dữ liệu của các nhiệm vụ đã "xóa mềm" từ bản cũ (xóa trong Sheets, KHÔNG xóa tệp trong Drive).
