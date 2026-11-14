@@ -12,18 +12,21 @@ const CFG = {
 };
 
 const LISTS = {
-  status: ['Chưa tiếp nhận', 'Đang thực hiện', 'Chờ duyệt', 'Yêu cầu bổ sung', 'Đã hoàn thành'],
+  // 'Chờ Hiệu trưởng duyệt': kết quả nhiệm vụ do leader tạo đã được leader duyệt, chờ Hiệu trưởng duyệt cuối.
+  status: ['Chưa tiếp nhận', 'Đang thực hiện', 'Chờ duyệt', 'Chờ Hiệu trưởng duyệt', 'Yêu cầu bổ sung', 'Đã hoàn thành'],
   pri: ['Thấp', 'Trung bình', 'Cao'],
   campus: ['Trường chính', 'Phân hiệu'],
   dept: ['Ban giám hiệu', 'Tổ GDTC – Nghệ thuật', 'Tổ KHTN – Công nghệ', 'Tổ Ngữ văn – GDCD', 'Tổ Sử – Địa', 'Tổ Tiếng Anh', 'Tổ Toán – Tin', 'Tổ Văn phòng'],
-  kind: ['Phó hiệu trưởng', 'Tổ trưởng chuyên môn', 'Giáo viên', 'Nhân viên'],
+  kind: ['Phó hiệu trưởng', 'Tổ trưởng chuyên môn', 'Tổ phó chuyên môn', 'Giáo viên', 'Nhân viên'],   // chỉ dùng để lọc người khi giao việc, không ảnh hưởng quyền
+  position: ['Hiệu trưởng', 'Phó hiệu trưởng', 'Tổ trưởng chuyên môn', 'Tổ phó chuyên môn', 'Giáo viên', 'Nhân viên'],   // chức vụ (chỉ hiển thị)
+  gender: ['Nam', 'Nữ'],
   role: ['admin', 'leader', 'staff']
 };
 
 // Các hành động có ghi dữ liệu: chạy trong khóa để hai người thao tác cùng lúc không làm hỏng dữ liệu.
 const WRITE_ACTIONS = ['readNotifs', 'createTask', 'editTask', 'deleteTask', 'acceptTask', 'progress', 'submitTask',
   'requestExt', 'decideExt', 'extendTask', 'approveTask', 'requestMore', 'addAssignee', 'removeAssignee', 'sendMsg',
-  'confirmDoc', 'deleteDoc', 'addTag', 'renameTag', 'deleteTag', 'updateProfile', 'approveSuggestion', 'skipSuggestion', 'addAgency', 'renameAgency', 'deleteAgency'];
+  'confirmDoc', 'deleteDoc', 'addTag', 'renameTag', 'deleteTag', 'updateProfile', 'addUser', 'updateUser', 'setUserActive', 'setUserRole', 'deleteUser', 'approveSuggestion', 'skipSuggestion', 'addAgency', 'renameAgency', 'deleteAgency'];
 
 // Cơ quan ban hành MẶC ĐỊNH (chỉ dùng để tạo dữ liệu ban đầu trong sheet Agencies; sau đó Hiệu trưởng tự thêm/sửa/xóa trên website).
 // Mã là tiền tố tên thư mục trong Drive; folder là tên thư mục sẽ tạo nếu chưa có.
@@ -48,7 +51,7 @@ class AppError extends Error {
 }
 
 // Số phiên bản backend: mở địa chỉ /exec trên trình duyệt để xem đang chạy bản nào (giúp biết đã Deploy đúng hay chưa).
-const APP_VERSION = 'ai-9';
+const APP_VERSION = 'ai-11';
 function doGet() { return out_({ ok: true, data: 'THCS Ngô Mây API đang chạy, phiên bản ' + APP_VERSION }); }
 
 function doPost(e) {

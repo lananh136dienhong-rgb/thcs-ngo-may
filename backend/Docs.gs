@@ -42,9 +42,9 @@ function apiUploadDoc_(u, r) {
     throw e;
   }
   try { file.setName(id + '_' + slug_(fl.name)); } catch (e) { console.error(e); }
-  if (!isAdmin_(u)) notify_('ADMIN', u.full_name + ' đã tải lên văn bản ' + id + ' (chờ phân loại)', '');
+  if (!isMgr_(u)) notify_('ADMIN', u.full_name + ' đã tải lên văn bản ' + id + ' (chờ phân loại)', '');
   const row = Db.all('Documents').find(function (d) { return d.doc_id === id; });
-  return { id: id, ai: aiEnabled_(), doc: row ? docView_(row, isAdmin_(u), userNames_(), u) : null };
+  return { id: id, ai: aiEnabled_(), doc: row ? docView_(row, isMgr_(u), userNames_(), u) : null };
 }
 function doc_(id) {
   const d = Db.all('Documents').find(function (x) { return x.doc_id === String(id) && !yes_(x.is_deleted); });
@@ -109,9 +109,9 @@ function fileDoc_(d, ag, tag) {
   const root = DriveApp.getFolderById(prop_('FOLDER_VANBAN')), dest = child_(agencyFolder_(root, ag), typeFolder_(tag));
   DriveApp.getFileById(d.drive_file_id).moveTo(dest);
 }
-// Hiệu trưởng đồng ý (hoặc sửa) phân loại: tệp được chuyển vào thư mục, các nhiệm vụ AI gợi ý được đưa vào danh sách chờ duyệt.
+// Hiệu trưởng hoặc leader đồng ý (hoặc sửa) phân loại: tệp được chuyển vào thư mục, các nhiệm vụ AI gợi ý được đưa vào danh sách chờ duyệt.
 function apiConfirmDoc_(u, r) {
-  admin_(u);
+  mgr_(u);
   const d = doc_(r.docId), tag = String(r.tag || ''), ag = agency_(r.agency);
   if (yes_(d.reviewed)) throw new AppError('Văn bản này đã được phân loại rồi', 'BAD');
   if (!Db.all('DocTags').some(function (t) { return yes_(t.active) && t.tag_name === tag; })) throw new AppError('Hãy chọn loại văn bản', 'BAD');
@@ -147,14 +147,14 @@ function wipeDoc_(d) {
   Db.removeWhere('Documents', function (x) { return x.doc_id === id; });
 }
 function apiDeleteDoc_(u, r) {
-  admin_(u);
+  admin_(u);   // chỉ Hiệu trưởng xóa được văn bản trong kho (leader không xóa được)
   wipeDoc_(doc_(r.docId));
   return true;
 }
-// Staff và leader chỉ tải được văn bản đã phân loại (hoặc do chính mình tải lên).
+// Nhân viên chỉ tải được văn bản đã phân loại (hoặc do chính mình tải lên); Hiệu trưởng và leader tải được mọi văn bản.
 function apiDownloadDoc_(u, r) {
   const d = doc_(r.docId);
-  if (!isAdmin_(u) && !yes_(d.reviewed) && d.uploaded_by !== u.user_id) throw new AppError('Văn bản này chưa được Hiệu trưởng phân loại', 'FORBIDDEN');
+  if (!isMgr_(u) && !yes_(d.reviewed) && d.uploaded_by !== u.user_id) throw new AppError('Văn bản này chưa được Hiệu trưởng phân loại', 'FORBIDDEN');
   const b = b64_(d.drive_file_id);
   return { name: d.name, mime: b.mime, data: b.data };
 }
@@ -187,30 +187,139 @@ function apiDeleteTag_(u, r) {
   return true;
 }
 
-// ---- hồ sơ cá nhân ----
-// Mọi người tự sửa được: họ tên, năm sinh, địa chỉ. Chức vụ, tổ, cơ sở chỉ Hiệu trưởng được sửa
-// (nếu không, nhân viên có thể tự nâng quyền thành Phó hiệu trưởng hoặc Tổ trưởng).
+// ---- hồ sơ cá nhân và quản lý nhân sự ----
+// Quyền trong hệ thống chỉ theo app_role (admin / leader / staff); chức vụ chỉ để hiển thị, đổi chức vụ KHÔNG làm thay đổi quyền.
+const NOT_DELETED = function (x) { return !yes_(x.is_deleted); };
+function nameOk_(v, selfId) {
+  const n = str_(v, 60, 'Họ và tên', true);
+  if (n.length < 2) throw new AppError('Họ và tên quá ngắn', 'BAD');
+  if (Db.all('Users').filter(NOT_DELETED).some(function (x) { return x.user_id !== selfId && String(x.full_name).trim().toLowerCase() === n.toLowerCase(); })) {
+    throw new AppError('Đã có nhân sự khác trùng họ tên này. Hãy thêm ký hiệu phân biệt (ví dụ: tên tổ).', 'BAD');
+  }
+  return n;
+}
+function emailOk_(v, selfId) {
+  const e = str_(v, 120, 'Email', true).toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) throw new AppError('Email không hợp lệ', 'BAD');
+  if (Db.all('Users').filter(NOT_DELETED).some(function (x) { return x.user_id !== selfId && String(x.email).trim().toLowerCase() === e; })) {
+    throw new AppError('Email này đã được dùng cho nhân sự khác', 'BAD');
+  }
+  return e;
+}
+function yearOk_(v) {
+  const y = String(v == null ? '' : v).trim();
+  if (y && !(/^\d{4}$/.test(y) && +y >= 1940 && +y <= 2012)) throw new AppError('Năm sinh không hợp lệ', 'BAD');
+  return y ? Number(y) : '';
+}
+function phoneOk_(v) {
+  const raw = String(v == null ? '' : v).trim();
+  if (!raw) return '';
+  const p = raw.replace(/[\s.\-()]/g, '');
+  if (!/^\+?\d{8,15}$/.test(p)) throw new AppError('Số điện thoại không hợp lệ', 'BAD');
+  return p;
+}
+// Số nhập tay trong sheet có thể bị Sheets đổi thành số và mất số 0 đầu (905123456): hiển thị lại thành 0905123456.
+function phoneView_(v) { const s = String(v == null ? '' : v).trim(); return /^[1-9]\d{8}$/.test(s) ? '0' + s : s; }
+function genderOk_(v) { const g = String(v == null ? '' : v).trim(); return g ? oneOf_(g, LISTS.gender, 'Giới tính') : ''; }
+// Chức vụ: chọn trong danh mục; giữ nguyên được giá trị cũ (nhập tay trong sheet) nếu không đổi.
+function positionOk_(v, cur) { const p = str_(v, 60, 'Chức vụ', true); return p === cur ? p : oneOf_(p, LISTS.position, 'Chức vụ'); }
+
+// Mọi người tự sửa được: họ tên, năm sinh, giới tính, số điện thoại, địa chỉ. Chức vụ, tổ, cơ sở: chỉ Hiệu trưởng.
 function apiUpdateProfile_(u, r) {
   const patch = {};
-  if (r.n !== undefined) {
-    const n = str_(r.n, 60, 'Họ và tên', true);
-    if (n.length < 2) throw new AppError('Họ và tên quá ngắn', 'BAD');
-    if (Db.all('Users').some(function (x) { return x.user_id !== u.user_id && String(x.full_name).trim().toLowerCase() === n.toLowerCase(); })) {
-      throw new AppError('Đã có người dùng khác trùng họ tên này. Hãy thêm ký hiệu phân biệt (ví dụ: tên tổ).', 'BAD');
-    }
-    patch.full_name = n;
-  }
-  if (r.y !== undefined) {
-    const y = String(r.y).trim();
-    if (y && !(/^\d{4}$/.test(y) && +y >= 1940 && +y <= 2012)) throw new AppError('Năm sinh không hợp lệ', 'BAD');
-    patch.birth_year = y ? Number(y) : '';
-  }
+  if (r.n !== undefined) patch.full_name = nameOk_(r.n, u.user_id);
+  if (r.y !== undefined) patch.birth_year = yearOk_(r.y);
+  if (r.g !== undefined) patch.gender = genderOk_(r.g);
+  if (r.ph !== undefined) patch.phone = phoneOk_(r.ph);
   if (r.ad !== undefined) patch.address = str_(r.ad, 200, 'Địa chỉ');
   if (isAdmin_(u)) {
-    if (r.r !== undefined) patch.position = str_(r.r, 60, 'Chức vụ', true);
+    if (r.r !== undefined) patch.position = positionOk_(r.r, u.position);
     if (r.t !== undefined) patch.department = oneOf_(r.t, LISTS.dept, 'Tổ chuyên môn');
     if (r.c !== undefined) patch.campus = oneOf_(r.c, LISTS.campus, 'Cơ sở');
   }
   Db.update('Users', u._row, patch);
   return true;
+}
+
+// ===== Mục "Nhân sự" (chỉ Hiệu trưởng) =====
+function staffView_(u) {
+  if (!isAdmin_(u)) return [];
+  return Db.all('Users').filter(NOT_DELETED).map(function (x) {
+    return { id: x.user_id, n: x.full_name, em: x.email, y: x.birth_year === '' ? '' : String(x.birth_year), g: x.gender || '', ph: phoneView_(x.phone), ad: x.address || '',
+      r: x.position || '', t: x.department || '', c: x.campus || '', role: x.app_role, on: yes_(x.active) ? 1 : 0 };
+  });
+}
+function staffUser_(id) {
+  const x = Db.all('Users').find(function (y) { return y.user_id === String(id) && !yes_(y.is_deleted); });
+  if (!x) throw new AppError('Không tìm thấy nhân sự', 'NOTFOUND');
+  return x;
+}
+// Luôn phải còn ít nhất một tài khoản Hiệu trưởng (admin) đang hoạt động.
+function keepAdmin_(x) {
+  if (x.app_role !== 'admin') return;
+  const others = Db.all('Users').filter(function (y) { return y.user_id !== x.user_id && y.app_role === 'admin' && yes_(y.active) && !yes_(y.is_deleted); });
+  if (!others.length) throw new AppError('Phải còn ít nhất một tài khoản admin đang hoạt động', 'BAD');
+}
+function staffFields_(r, x) {
+  return {
+    full_name: nameOk_(r.n, x ? x.user_id : ''), birth_year: yearOk_(r.y), gender: genderOk_(r.g), phone: phoneOk_(r.ph), address: str_(r.ad, 200, 'Địa chỉ'),
+    position: positionOk_(r.r, x ? x.position : null), department: oneOf_(r.t, LISTS.dept, 'Tổ chuyên môn'), campus: oneOf_(r.c, LISTS.campus, 'Cơ sở')
+  };
+}
+function apiAddUser_(u, r) {
+  admin_(u);
+  const f = staffFields_(r, null);
+  f.email = emailOk_(r.em, '');
+  f.app_role = oneOf_(r.role || 'staff', LISTS.role, 'Phân quyền');
+  f.active = r.on === undefined ? true : !!r.on;
+  f.is_deleted = false;
+  f.created_at = now_();
+  f.user_id = Db.nextId('Users', 'user_id', 'U', 3);
+  Db.append('Users', f);
+  return { id: f.user_id };
+}
+function apiUpdateUser_(u, r) {
+  admin_(u);
+  const x = staffUser_(r.id), f = staffFields_(r, x);
+  const em = emailOk_(r.em, x.user_id);
+  if (x.user_id === u.user_id && em !== String(x.email).trim().toLowerCase()) throw new AppError('Không thể đổi email đăng nhập của chính bạn tại đây (tránh tự khóa tài khoản). Hãy sửa trong sheet Users nếu thật sự cần.', 'BAD');
+  f.email = em;
+  Db.update('Users', x._row, f);
+  return true;
+}
+function apiSetUserActive_(u, r) {
+  admin_(u);
+  const x = staffUser_(r.id), on = !!r.on;
+  if (x.user_id === u.user_id) throw new AppError('Bạn không thể tạm dừng tài khoản của chính mình', 'BAD');
+  if (!on) keepAdmin_(x);
+  Db.update('Users', x._row, { active: on });
+  return true;
+}
+function apiSetUserRole_(u, r) {
+  admin_(u);
+  const x = staffUser_(r.id), role = oneOf_(r.role, LISTS.role, 'Phân quyền');
+  if (x.user_id === u.user_id) throw new AppError('Bạn không thể đổi phân quyền của chính mình', 'BAD');
+  if (role !== 'admin') keepAdmin_(x);
+  Db.update('Users', x._row, { app_role: role });
+  return true;
+}
+// Xóa nhân sự đã nghỉ việc: tài khoản bị khóa vĩnh viễn và ẩn khỏi danh sách, nhưng dòng trong sheet Users được giữ lại
+// (đánh dấu is_deleted) để lịch sử các nhiệm vụ cũ vẫn hiện đúng tên. Người này được bỏ khỏi các nhiệm vụ CHƯA hoàn thành.
+function apiDeleteUser_(u, r) {
+  admin_(u);
+  const x = staffUser_(r.id);
+  if (x.user_id === u.user_id) throw new AppError('Bạn không thể xóa tài khoản của chính mình', 'BAD');
+  keepAdmin_(x);
+  const open = Db.all('TaskAssignees').filter(function (a) { return a.user_id === x.user_id; }).map(function (a) {
+    return Db.all('Tasks').find(function (t) { return t.task_id === a.task_id && !yes_(t.is_deleted) && t.status !== 'Đã hoàn thành'; });
+  }).filter(Boolean);
+  const solo = open.filter(function (t) { return assignees_(t.task_id).length <= 1; });
+  if (solo.length) throw new AppError('Không xóa được: ' + x.full_name + ' là người thực hiện duy nhất của ' + solo.map(function (t) { return t.task_id; }).join(', ') + '. Hãy giao các nhiệm vụ này cho người khác trước.', 'BAD');
+  open.forEach(function (t) {
+    Db.removeWhere('TaskAssignees', function (a) { return a.task_id === t.task_id && a.user_id === x.user_id; });
+    hist_(t.task_id, u.user_id, 'bot_nguoi', 'Hiệu trưởng đưa ' + x.full_name + ' ra khỏi nhiệm vụ (nhân sự đã nghỉ việc)');
+  });
+  Db.removeWhere('Notifications', function (n) { return n.to_user_id === x.user_id; });
+  Db.update('Users', x._row, { active: false, is_deleted: true });
+  return { removedFrom: open.map(function (t) { return t.task_id; }) };
 }

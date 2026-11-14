@@ -62,7 +62,7 @@ function setup() {
 }
 
 function checkUsers() {
-  const rows = Db.all('Users'), emails = {}, names = {}, problems = [];
+  const rows = Db.all('Users').filter(function (u) { return !yes_(u.is_deleted); }), emails = {}, names = {}, problems = [];   // bỏ qua nhân sự đã xóa
   rows.forEach(function (u) {
     const tag = 'Dòng ' + u._row + ' (' + u.full_name + '): ';
     const em = String(u.email).trim().toLowerCase();
@@ -73,8 +73,6 @@ function checkUsers() {
     if (LISTS.role.indexOf(u.app_role) < 0) problems.push(tag + 'app_role phải là admin, leader hoặc staff');
     if (LISTS.dept.indexOf(u.department) < 0) problems.push(tag + 'department không nằm trong danh mục');
     if (LISTS.campus.indexOf(u.campus) < 0) problems.push(tag + 'campus không nằm trong danh mục');
-    if (u.app_role === 'leader' && ['Phó hiệu trưởng', 'Tổ trưởng chuyên môn'].indexOf(u.position) < 0) problems.push(tag + 'leader phải có position là Phó hiệu trưởng hoặc Tổ trưởng chuyên môn');
-    if (u.app_role === 'staff' && ['Phó hiệu trưởng', 'Tổ trưởng chuyên môn'].indexOf(u.position) >= 0) problems.push(tag + 'đang là ' + u.position + ' nhưng app_role là staff (sẽ không có quyền thêm người vào nhiệm vụ)');
   });
   if (!rows.some(function (u) { return u.app_role === 'admin' && yes_(u.active); })) problems.push('Chưa có tài khoản admin nào đang hoạt động');
   Logger.log(problems.length ? 'PHÁT HIỆN ' + problems.length + ' VẤN ĐỀ:\n' + problems.join('\n') : 'Danh sách nhân viên hợp lệ (' + rows.length + ' người).');

@@ -64,7 +64,7 @@ ok(call('extendTask',T.admin,{id:'NV-0002',date:'2026-11-15'}).ok,'gia hạn tr�
 console.log('\n== 6. Leader thêm người');
 call('createTask',T.admin,{title:'Nhiệm vụ 3',due:'2026-11-09',assignees:[ids('Phạm Đức Long')]});
 r=call('addAssignee',T.anh,{id:'NV-0003',userId:ids('Bùi Thị Lan')});ok(!r.ok,'staff không thêm người');
-r=call('addAssignee',T.tt,{id:'NV-0003',userId:ids('Nguyễn Minh Anh')});ok(!r.ok&&r.code=='FORBIDDEN','tổ trưởng không thêm người khác tổ');
+r=call('addAssignee',T.tt,{id:'NV-0003',userId:ids('Nguyễn Minh Anh')});ok(r.ok,'leader thêm được người khác tổ (quyền chỉ theo app_role)');ok(call('removeAssignee',T.tt,{id:'NV-0003',userId:ids('Nguyễn Minh Anh')}).ok,'leader bớt người mình vừa thêm');
 r=call('addAssignee',T.tt,{id:'NV-0003',userId:ids('Bùi Thị Lan')});ok(r.ok,'tổ trưởng thêm người cùng tổ');
 r=call('addAssignee',T.tt,{id:'NV-0001',userId:ids('Bùi Thị Lan')});ok(!r.ok,'tổ trưởng không thêm vào nhiệm vụ mình không tham gia');
 call('createTask',T.admin,{title:'Nhiệm vụ 4',due:'2026-11-09',assignees:[ids('Hoàng Văn Bình')]});
@@ -338,7 +338,8 @@ console.log('\n== 18. Điều chỉnh nhân sự theo vai trò (leader / admin)'
   const asx=(tok,id)=>call('bootstrap',tok).data.tasks.find(t=>t.id==id)?.asx;
   ok(call('bootstrap',T.lan).data.people.length>0,'leader mới (chức vụ Giáo viên) nhận danh sách nhân sự');
   r=call('addAssignee',T.lan,{id:L,userId:U('Đỗ Văn Hùng').user_id});ok(r.ok,'leader mới (chức vụ Giáo viên) thêm được người cùng tổ');
-  r=call('addAssignee',T.lan,{id:L,userId:'U005'});ok(!r.ok&&r.code=='FORBIDDEN','leader không phải PHT không thêm người khác tổ');
+  r=call('addAssignee',T.lan,{id:L,userId:'U005'});ok(r.ok,'leader (bất kể chức vụ) thêm được người khác tổ');call('removeAssignee',T.lan,{id:L,userId:'U005'});
+  ctx.Db.update('Users',U('Đỗ Văn Hùng')._row,{position:'Tổ phó chuyên môn'});
   let x=asx(T.admin,L);ok(x.find(a=>a.n=='Đỗ Văn Hùng').by=='l'&&x.find(a=>a.n=='Phạm Đức Long').by=='a','asx đánh dấu đúng người do admin / leader thêm');
   r=call('removeAssignee',T.anh,{id:L,userId:U('Đỗ Văn Hùng').user_id});ok(!r.ok,'staff không bớt người');
   r=call('removeAssignee',T.lan,{id:L,userId:U('Phạm Đức Long').user_id});ok(!r.ok&&r.code=='FORBIDDEN','leader KHÔNG bớt được người do admin giao');
@@ -378,5 +379,144 @@ console.log('\n== 19. Chia sẻ link để tải thẳng từ Drive');
   const r2=ctx.shareAllFiles();ok(r2.done>=1&&files[fid].access=='ANYONE_WITH_LINK','shareAllFiles chia sẻ tệp cũ');
   ok(ctx.shareAllFiles().done==0,'chạy lại shareAllFiles thì bỏ qua tệp đã chia sẻ');
   ok(!call('bootstrap',T.anh).data.tasks.some(t=>t.id==nid),'người ngoài nhiệm vụ không nhận được mã tệp');
+}
+console.log('\n== 20. Mục Nhân sự (chỉ Hiệu trưởng)');
+{
+  const bs=tok=>call('bootstrap',tok).data;
+  ok(bs(T.admin).staff.length>0&&bs(T.admin).staff.some(x=>x.role=='admin'),'admin nhận danh sách nhân sự đầy đủ (gồm cả admin)');
+  ok(bs(T.tt).staff.length==0&&bs(T.anh).staff.length==0,'leader và staff không nhận danh sách nhân sự');
+  r=call('addUser',T.tt,{n:'Người lạ',em:'la@gmail.com',r:'Giáo viên',t:'Tổ Toán – Tin',c:'Trường chính'});ok(!r.ok&&r.code=='FORBIDDEN','leader không thêm được nhân sự');
+  r=call('addUser',T.admin,{n:'Võ Thị Hoa',em:'Hoa@Gmail.com',y:'1988',g:'Nữ',ph:'090 123 4567',ad:'Quy Nhơn',r:'Tổ phó chuyên môn',t:'Tổ Tiếng Anh',c:'Phân hiệu',role:'leader',on:true});
+  ok(r.ok&&r.data.id,'admin thêm nhân sự mới: '+JSON.stringify(r));
+  const hid=r.data.id;let h=bs(T.admin).staff.find(x=>x.id==hid);
+  ok(h&&h.em=='hoa@gmail.com'&&h.ph=='0901234567'&&h.g=='Nữ'&&h.r=='Tổ phó chuyên môn'&&h.role=='leader'&&h.on==1,'lưu đúng email (chữ thường), SĐT giữ số 0 đầu, giới tính, chức vụ, quyền: '+JSON.stringify(h));
+  ok(!call('addUser',T.admin,{n:'Khác',em:'hoa@gmail.com',r:'Giáo viên',t:'Tổ Tiếng Anh',c:'Phân hiệu'}).ok,'chặn trùng email');
+  ok(!call('addUser',T.admin,{n:'võ thị hoa',em:'hoa2@gmail.com',r:'Giáo viên',t:'Tổ Tiếng Anh',c:'Phân hiệu'}).ok,'chặn trùng họ tên');
+  ok(!call('addUser',T.admin,{n:'X Y',em:'xy@gmail.com',ph:'12ab',r:'Giáo viên',t:'Tổ Tiếng Anh',c:'Phân hiệu'}).ok,'chặn SĐT sai');
+  ok(!call('addUser',T.admin,{n:'X Y',em:'xy@gmail.com',r:'Thủ quỹ',t:'Tổ Tiếng Anh',c:'Phân hiệu'}).ok,'chức vụ ngoài danh mục bị chặn');
+  ok(!call('addUser',T.admin,{n:'X Y',em:'xy@gmail.com',r:'Giáo viên',t:'Tổ Tiếng Anh',c:'Phân hiệu',role:'boss'}).ok,'quyền ngoài admin/leader/staff bị chặn');
+  r=call('login','',{idToken:gtok('hoa@gmail.com')});ok(r.ok,'nhân sự mới đăng nhập được ngay');T.hoa=r.data.token;
+  ok(bs(T.hoa).me.role=='leader'&&bs(T.hoa).me.ph=='0901234567','hồ sơ của nhân sự mới đúng');
+  ok(call('updateUser',T.admin,{id:hid,n:'Võ Thị Hoa',em:'hoa@gmail.com',y:'1989',g:'Nữ',ph:'+84 901 234 567',ad:'Gia Lai',r:'Giáo viên',t:'Tổ Tiếng Anh',c:'Trường chính'}).ok,'admin sửa thông tin');
+  h=bs(T.admin).staff.find(x=>x.id==hid);ok(h.y=='1989'&&h.ph=='+84901234567'&&h.r=='Giáo viên'&&h.c=='Trường chính'&&h.role=='leader','sửa chức vụ không đổi quyền');
+  // tự sửa hồ sơ: giới tính, SĐT
+  ok(call('updateProfile',T.hoa,{g:'Nữ',ph:'0911222333',r:'Hiệu trưởng'}).ok,'nhân sự tự sửa giới tính, SĐT');
+  ok(bs(T.hoa).me.ph=='0911222333'&&bs(T.hoa).me.r=='Giáo viên','tự sửa SĐT được, không tự đổi chức vụ');
+  // phân quyền
+  r=call('setUserRole',T.admin,{id:hid,role:'staff'});ok(r.ok&&bs(T.hoa).me.role=='staff','đổi quyền leader → staff có hiệu lực ngay');
+  ok(bs(T.hoa).me.ph=='0911222333','SĐT giữ số 0 đầu sau khi sửa ô khác cùng dòng');
+  { const row=books.SHEET1.getSheetByName('Users').rows.find(x=>x[0]==hid),i=books.SHEET1.getSheetByName('Users').rows[0].indexOf('phone'); ok(row[i]==='0911222333','ô SĐT trong sheet vẫn là chữ "0911222333", không bị đổi thành số: '+row[i]); }
+  ok(!call('createTask',T.hoa,{title:'x',due:'2026-12-31',assignees:['U005']}).ok,'sau khi thành staff không tạo nhiệm vụ được');
+  ok(call('setUserRole',T.admin,{id:hid,role:'leader'}).ok,'đổi lại thành leader');
+  ok(!call('setUserRole',T.admin,{id:'U001',role:'staff'}).ok,'admin không tự hạ quyền mình');
+  ok(!call('setUserActive',T.admin,{id:'U001',on:false}).ok,'admin không tự tạm dừng mình');
+  ok(!call('deleteUser',T.admin,{id:'U001'}).ok,'admin không tự xóa mình');
+  ok(!call('updateUser',T.admin,{id:'U001',n:'Nguyễn Thị Lan Anh',em:'khac@gmail.com',r:'Hiệu trưởng',t:'Ban giám hiệu',c:'Trường chính'}).ok,'admin không tự đổi email đăng nhập');
+  ok(!call('setUserRole',T.tt,{id:hid,role:'staff'}).ok,'leader không đổi quyền người khác');
+  // tạm dừng
+  ok(call('setUserActive',T.admin,{id:hid,on:false}).ok,'tạm dừng truy cập');
+  ok(!call('bootstrap',T.hoa).ok,'tài khoản tạm dừng mất phiên ngay');
+  r=call('login','',{idToken:gtok('hoa@gmail.com')});ok(!r.ok&&/tạm dừng/.test(r.error),'đăng nhập báo tài khoản tạm dừng: '+r.error);
+  ok(!bs(T.admin).people.some(p=>p.id==hid),'người bị tạm dừng không có trong danh sách giao việc');
+  ok(call('setUserActive',T.admin,{id:hid,on:true}).ok&&call('login','',{idToken:gtok('hoa@gmail.com')}).ok,'mở lại truy cập, đăng nhập lại được');
+  T.hoa=call('login','',{idToken:gtok('hoa@gmail.com')}).data.token;
+  // xóa nhân sự
+  const solo=call('createTask',T.admin,{title:'Chỉ một người',due:'2026-12-31',assignees:[hid]}).data.id;
+  r=call('deleteUser',T.admin,{id:hid});ok(!r.ok&&r.error.includes(solo),'không xóa được người thực hiện duy nhất: '+r.error);
+  ok(call('editTask',T.admin,{id:solo,title:'Chỉ một người',desc:'',pri:'Trung bình',keep:[],as:[hid,'U005']}).ok,'thêm người thứ hai');
+  const doneT=call('createTask',T.admin,{title:'Đã xong',due:'2026-12-31',assignees:[hid,'U005']}).data.id;
+  call('acceptTask',T.hoa,{id:doneT});call('submitTask',T.hoa,{id:doneT,text:'xong'});call('approveTask',T.admin,{id:doneT});
+  r=call('deleteUser',T.admin,{id:hid});ok(r.ok&&r.data.removedFrom.includes(solo)&&!r.data.removedFrom.includes(doneT),'xóa nhân sự: bỏ khỏi nhiệm vụ chưa xong, giữ ở nhiệm vụ đã xong');
+  ok(!bs(T.admin).staff.some(x=>x.id==hid),'nhân sự đã xóa biến mất khỏi danh sách');
+  ok(!call('login','',{idToken:gtok('hoa@gmail.com')}).ok,'nhân sự đã xóa không đăng nhập được');
+  const tsk=bs(T.admin).tasks;ok(!tsk.find(t=>t.id==solo).as.includes('Võ Thị Hoa')&&tsk.find(t=>t.id==doneT).as.includes('Võ Thị Hoa'),'lịch sử nhiệm vụ đã xong vẫn hiện tên');
+  r=call('addUser',T.admin,{n:'Võ Thị Hoa',em:'hoa@gmail.com',r:'Giáo viên',t:'Tổ Tiếng Anh',c:'Phân hiệu'});ok(r.ok&&r.data.id!=hid,'thêm lại được người cùng email/họ tên sau khi đã xóa (mã mới)');
+  const hid2=r.data.id;ok(call('login','',{idToken:gtok('hoa@gmail.com')}).ok&&bs(call('login','',{idToken:gtok('hoa@gmail.com')}).data.token).me.id==hid2,'đăng nhập vào tài khoản mới, không phải tài khoản đã xóa');
+  ctx.checkUsers();
+}
+console.log('\n== 21. Leader tạo, giám sát, duyệt 2 cấp, xóa nhiệm vụ');
+{
+  const bs=tok=>call('bootstrap',tok).data;
+  // Phạm Đức Long (leader, T.tt) tạo nhiệm vụ cho Minh Anh (U005) và Bùi Thị Lan
+  r=call('createTask',T.tt,{title:'Leader giao 1',desc:'nội dung',pri:'Cao',due:'2026-12-31',assignees:['U005']});ok(r.ok,'leader tạo nhiệm vụ: '+JSON.stringify(r));
+  const L1=r.data.id;
+  let tk=bs(T.tt).tasks.find(t=>t.id==L1);ok(tk&&tk.by=='Phạm Đức Long'&&tk.byP=='Tổ trưởng chuyên môn'&&tk.byId=='U003','leader thấy nhiệm vụ mình tạo (dù không được giao), có thông tin người tạo');
+  ok(bs(T.admin).tasks.find(t=>t.id==L1).by=='Phạm Đức Long','Hiệu trưởng thấy người tạo');
+  const A0=call('createTask',T.admin,{title:'HT giao 0',due:'2026-12-31',assignees:['U005']}).data.id;
+  ok(bs(T.admin).tasks.find(t=>t.id==A0).byP=='Hiệu trưởng','nhiệm vụ của Hiệu trưởng ghi người tạo là Hiệu trưởng');
+  ok(!bs(T.pht).tasks.some(t=>t.id==L1),'leader khác không thấy nhiệm vụ không liên quan');
+  ok(bs(T.tt).tasks.find(t=>t.id==L1).hist[0][1]=='Tổ trưởng chuyên môn Phạm Đức Long giao nhiệm vụ','lịch sử ghi đúng người giao');
+  // thông báo về leader, không về Hiệu trưởng
+  const nb=tok=>bs(tok).notifs.length;let a0=nb(T.admin),l0=nb(T.tt);
+  call('acceptTask',T.anh,{id:L1});ok(nb(T.tt)==l0+1&&nb(T.admin)==a0,'tiếp nhận: thông báo cho leader tạo nhiệm vụ');
+  ok(call('sendMsg',T.tt,{id:L1,text:'Cố lên'}).ok,'leader tạo nhiệm vụ nhắn tin được');
+  ok(call('submitTask',T.anh,{id:L1,text:'Bản nộp'}).ok,'nhân viên nộp');
+  ok(!call('approveTask',T.pht,{id:L1}).ok,'leader khác không duyệt được');
+  ok(!call('approveTask',T.anh,{id:L1}).ok,'staff không duyệt được');
+  a0=nb(T.admin);
+  r=call('approveTask',T.tt,{id:L1});ok(r.ok,'leader duyệt cấp 1');
+  tk=bs(T.tt).tasks.find(t=>t.id==L1);ok(tk.st=='Chờ Hiệu trưởng duyệt','sau khi leader duyệt: Chờ Hiệu trưởng duyệt (chưa hoàn thành)');
+  ok(nb(T.admin)==a0+1,'Hiệu trưởng nhận thông báo duyệt cuối');
+  ok(!call('approveTask',T.tt,{id:L1}).ok,'leader không duyệt lần 2 để thành hoàn thành');
+  ok(!call('submitTask',T.anh,{id:L1,text:'nộp thêm'}).ok,'đang chờ Hiệu trưởng duyệt thì không nộp thêm');
+  ok(!call('requestExt',T.anh,{id:L1,to:'2027-01-10',why:'x'}).ok,'đang chờ Hiệu trưởng duyệt thì không xin gia hạn');
+  ok(!call('deleteTask',T.pht,{id:L1}).ok,'leader khác không xóa được');
+  ok(call('requestMore',T.admin,{id:L1,comment:'Bổ sung số liệu'}).ok,'Hiệu trưởng yêu cầu bổ sung ở bước duyệt cuối');
+  ok(bs(T.tt).tasks.find(t=>t.id==L1).st=='Yêu cầu bổ sung','trạng thái Yêu cầu bổ sung');
+  call('submitTask',T.anh,{id:L1,text:'Bản 2'});
+  ok(call('requestMore',T.tt,{id:L1,comment:'Thiếu chữ ký'}).ok,'leader yêu cầu bổ sung');
+  call('submitTask',T.anh,{id:L1,text:'Bản 3'});call('approveTask',T.tt,{id:L1});
+  ok(call('approveTask',T.admin,{id:L1}).ok&&bs(T.tt).tasks.find(t=>t.id==L1).st=='Đã hoàn thành','Hiệu trưởng duyệt cuối → Đã hoàn thành');
+  r=call('deleteTask',T.tt,{id:L1});ok(!r.ok&&r.code=='FORBIDDEN','leader không xóa nhiệm vụ đã hoàn thành của mình');
+  ok(!call('editTask',T.tt,{id:L1,title:'x',desc:'',pri:'Thấp',keep:[]}).ok,'leader không sửa nhiệm vụ đã hoàn thành');
+  // Hiệu trưởng duyệt thẳng nhiệm vụ của leader (bỏ qua bước leader)
+  const L2=call('createTask',T.tt,{title:'Leader giao 2',due:'2026-12-31',assignees:['U005']}).data.id;
+  call('acceptTask',T.anh,{id:L2});call('submitTask',T.anh,{id:L2,text:'x'});
+  ok(call('approveTask',T.admin,{id:L2}).ok&&bs(T.admin).tasks.find(t=>t.id==L2).st=='Đã hoàn thành','Hiệu trưởng duyệt thẳng được');
+  // gia hạn, sửa, xóa nhiệm vụ của mình
+  const L3=call('createTask',T.tt,{title:'Leader giao 3',due:'2026-12-31',assignees:['U005']}).data.id;
+  call('acceptTask',T.anh,{id:L3});
+  ok(call('requestExt',T.anh,{id:L3,to:'2027-01-15',why:'bận'}).ok,'xin gia hạn nhiệm vụ của leader');
+  ok(!call('decideExt',T.pht,{id:L3,ok:true}).ok,'leader khác không quyết gia hạn');
+  ok(call('decideExt',T.tt,{id:L3,ok:true}).ok&&bs(T.tt).tasks.find(t=>t.id==L3).due=='2027-01-15','leader tạo nhiệm vụ quyết gia hạn');
+  ok(call('extendTask',T.tt,{id:L3,date:'2027-01-20'}).ok,'leader gia hạn trực tiếp');
+  ok(call('editTask',T.tt,{id:L3,title:'Leader giao 3 (sửa)',desc:'',pri:'Thấp',keep:[],as:['U005','U010']}).ok,'leader sửa nhiệm vụ của mình, thêm người');
+  ok(call('editTask',T.admin,{id:L3,title:'Leader giao 3 (sửa)',desc:'',pri:'Thấp',keep:[],as:['U005','U010','U002']}).ok,'Hiệu trưởng thêm người vào nhiệm vụ của leader');
+  r=call('editTask',T.tt,{id:L3,title:'Leader giao 3 (sửa)',desc:'',pri:'Thấp',keep:[],as:['U005','U010']});ok(!r.ok&&r.code=='FORBIDDEN','leader không bớt được người do Hiệu trưởng thêm');
+  ok(call('editTask',T.tt,{id:L3,title:'Leader giao 3 (sửa)',desc:'',pri:'Thấp',keep:[],as:['U005','U002']}).ok,'leader bớt được người do mình thêm');
+  ok(!call('editTask',T.pht,{id:A0,title:'x',desc:'',pri:'Thấp',keep:[]}).ok,'leader không sửa nhiệm vụ của Hiệu trưởng');
+  ok(!call('deleteTask',T.tt,{id:A0}).ok,'leader không xóa nhiệm vụ của Hiệu trưởng');
+  ok(call('deleteTask',T.tt,{id:L3}).ok&&!bs(T.admin).tasks.some(t=>t.id==L3),'leader xóa được nhiệm vụ chưa hoàn thành của mình');
+  ok(call('deleteTask',T.admin,{id:L1}).ok,'Hiệu trưởng xóa được nhiệm vụ đã hoàn thành của leader');
+  // nhiệm vụ của Hiệu trưởng: vẫn duyệt 1 cấp
+  const A1=call('createTask',T.admin,{title:'HT giao',due:'2026-12-31',assignees:['U005']}).data.id;
+  call('acceptTask',T.anh,{id:A1});call('submitTask',T.anh,{id:A1,text:'x'});
+  ok(!call('approveTask',T.tt,{id:A1}).ok,'leader không duyệt nhiệm vụ của Hiệu trưởng');
+  ok(call('approveTask',T.admin,{id:A1}).ok&&bs(T.admin).tasks.find(t=>t.id==A1).st=='Đã hoàn thành','nhiệm vụ của Hiệu trưởng duyệt 1 lần là xong');
+}
+console.log('\n== 22. Leader với văn bản và đề xuất AI');
+{
+  const bs=tok=>call('bootstrap',tok).data;
+  gemini.queue=[];
+  r=call('uploadDoc',T.anh,{name:'cv-leader.txt',mime:'text/plain',data:b64('Công văn của Sở về việc tổ chức hội thi, đề nghị các trường gửi kế hoạch trước ngày 30/12/2026.')});ok(r.ok,'staff tải văn bản lên');
+  const vid=r.data.id;
+  ok(bs(T.tt).docs.some(d=>d.id==vid&&!d.ok),'leader thấy văn bản đang chờ phân loại');
+  ok(!bs(T.lan).docs.some(d=>d.id==vid)||bs(T.lan).me.role=='leader','staff khác không thấy văn bản chờ phân loại');
+  r=call('confirmDoc',T.anh,{docId:vid,tag:'Công văn',agency:'03'});ok(!r.ok&&r.code=='FORBIDDEN','staff không phân loại được');
+  r=call('confirmDoc',T.tt,{docId:vid,tag:'Công văn',agency:'03'});ok(r.ok,'leader phân loại văn bản: '+JSON.stringify(r));
+  ok(bs(T.anh).docs.find(d=>d.id==vid).ok==1,'văn bản đã vào kho');
+  r=call('deleteDoc',T.tt,{docId:vid});ok(!r.ok&&r.code=='FORBIDDEN','leader không xóa được văn bản trong kho');
+  r=call('uploadDoc',T.tt,{name:'kh-leader.txt',mime:'text/plain',data:b64('Kế hoạch')});ok(r.ok,'leader tải văn bản lên');
+  ok(r.data.doc&&r.data.doc.ai&&'st' in r.data.doc.ai,'leader nhận thông tin AI đầy đủ');
+  // đề xuất AI
+  ctx.Db.append('AiSuggestions',{sug_id:'DX-9001',doc_id:vid,title:'Gửi kế hoạch hội thi',description:'d',due_date:'2026-12-28',source_text:'s',how:'h',status:'pending',task_id:'',created_at:'2026-10-28T09:00:00'});
+  ok(bs(T.tt).sug.some(s=>s.id=='DX-9001')&&bs(T.admin).sug.some(s=>s.id=='DX-9001'),'leader và Hiệu trưởng cùng thấy đề xuất AI');
+  ok(bs(T.anh).sug.length==0,'staff không thấy đề xuất AI');
+  r=call('approveSuggestion',T.tt,{id:'DX-9001',title:'Gửi kế hoạch hội thi',desc:'d',pri:'Cao',due:'2026-12-28',assignees:['U005']});ok(r.ok,'leader giao việc từ đề xuất AI');
+  const st=bs(T.tt).tasks.find(t=>t.id==r.data.id);ok(st&&st.byId=='U003'&&st.src&&st.src.id==vid,'nhiệm vụ đứng tên leader, gắn văn bản nguồn');
+  ok(!bs(T.admin).sug.some(s=>s.id=='DX-9001'),'đề xuất đã giao biến mất với mọi người');
+  ctx.Db.append('AiSuggestions',{sug_id:'DX-9002',doc_id:vid,title:'b',description:'',due_date:'',source_text:'',how:'',status:'pending',task_id:'',created_at:'2026-10-28T09:00:00'});
+  ok(!call('skipSuggestion',T.anh,{id:'DX-9002'}).ok&&call('skipSuggestion',T.tt,{id:'DX-9002'}).ok,'leader bỏ qua đề xuất được, staff thì không');
+  ok(!call('addTag',T.tt,{name:'Thẻ mới'}).ok&&!call('addAgency',T.tt,{name:'CQ mới'}).ok,'leader không quản lý thẻ/cơ quan');
 }
 console.log(`\nKẾT QUẢ: ${pass} đạt, ${fail} lỗi`);process.exit(fail?1:0);

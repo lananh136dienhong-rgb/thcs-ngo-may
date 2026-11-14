@@ -3,7 +3,7 @@
  * Mỗi sheet là một bảng; dòng 1 là tên cột. Mã đọc/ghi theo TÊN CỘT nên có thể đổi thứ tự cột.
  */
 const SCHEMA = {
-  Users: ['user_id', 'full_name', 'email', 'birth_year', 'address', 'position', 'app_role', 'department', 'campus', 'active', 'created_at'],
+  Users: ['user_id', 'full_name', 'email', 'birth_year', 'address', 'position', 'app_role', 'department', 'campus', 'active', 'created_at', 'gender', 'phone', 'is_deleted'],
   Tasks: ['task_id', 'title', 'description', 'priority', 'campus', 'department', 'target_type', 'due_date', 'status', 'created_by', 'created_at', 'updated_at', 'review_comment', 'ext_pending', 'is_deleted', 'src_doc'],
   TaskAssignees: ['row_id', 'task_id', 'user_id', 'accepted_at', 'added_by', 'added_at'],
   TaskDocs: ['row_id', 'task_id', 'doc_id', 'added_by', 'added_at'],
@@ -122,7 +122,9 @@ const Db = (function () {
     dropCache(n);
   }
   function update(n, row, patch) {
-    const h = head(n), rng = sheet(n).getRange(row, 1, 1, h.length), cur = rng.getValues()[0];
+    // Ghi lại CẢ dòng: các ô không đổi cũng phải qua safe(), nếu không Sheets sẽ đổi "0905..." thành số (mất số 0)
+    // và biến chuỗi bắt đầu bằng "=" thành công thức.
+    const h = head(n), rng = sheet(n).getRange(row, 1, 1, h.length), cur = rng.getValues()[0].map(safe);
     Object.keys(patch).forEach(function (k) {
       const i = h.indexOf(k);
       if (i >= 0) cur[i] = safe(patch[k]);

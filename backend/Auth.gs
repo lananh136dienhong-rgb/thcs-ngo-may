@@ -19,10 +19,9 @@ function verifyGoogle_(idToken) {
 function apiLogin_(_, req) {
   if (!req.idToken) throw new AppError('Thiếu thông tin đăng nhập', 'BAD');
   const email = verifyGoogle_(req.idToken);
-  const u = Db.all('Users').find(function (x) { return String(x.email).trim().toLowerCase() === email; });
-  if (!u || !yes_(u.active)) {
-    throw new AppError('Email ' + email + ' chưa được cấp quyền truy cập. Vui lòng liên hệ văn phòng nhà trường.', 'DENIED');
-  }
+  const u = Db.all('Users').find(function (x) { return !yes_(x.is_deleted) && String(x.email).trim().toLowerCase() === email; });
+  if (!u) throw new AppError('Email ' + email + ' chưa được cấp quyền truy cập. Vui lòng liên hệ văn phòng nhà trường.', 'DENIED');
+  if (!yes_(u.active)) throw new AppError('Tài khoản ' + email + ' đang bị tạm dừng truy cập. Vui lòng liên hệ Hiệu trưởng.', 'DENIED');
   if (LISTS.role.indexOf(u.app_role) < 0) throw new AppError('Tài khoản chưa được gán quyền. Vui lòng liên hệ văn phòng.', 'DENIED');
   return { token: makeToken_(u.user_id) };
 }
@@ -43,10 +42,16 @@ function authUser_(tok) {
   const body = Utilities.newBlob(Utilities.base64DecodeWebSafe(parts[0])).getDataAsString().split('|');
   if (Number(body[1]) < Date.now()) throw bad();
   const u = Db.all('Users').find(function (x) { return x.user_id === body[0]; });
-  if (!u || !yes_(u.active)) throw bad();   // tài khoản bị khóa thì mất quyền ngay, không cần chờ hết phiên
+  if (!u || !yes_(u.active) || yes_(u.is_deleted)) throw bad();   // tài khoản bị tạm dừng/xóa thì mất quyền ngay, không cần chờ hết phiên
   return u;
 }
+// Quyền chỉ xét theo app_role: admin (Hiệu trưởng), leader, staff.
 function isAdmin_(u) { return u.app_role === 'admin'; }
+function isLeader_(u) { return u.app_role === 'leader'; }
+function isMgr_(u) { return isAdmin_(u) || isLeader_(u); }   // được tạo nhiệm vụ, tải/phân loại văn bản, nhận đề xuất AI
 function admin_(u) {
   if (!isAdmin_(u)) throw new AppError('Bạn không có quyền thực hiện thao tác này', 'FORBIDDEN');
+}
+function mgr_(u) {
+  if (!isMgr_(u)) throw new AppError('Bạn không có quyền thực hiện thao tác này', 'FORBIDDEN');
 }

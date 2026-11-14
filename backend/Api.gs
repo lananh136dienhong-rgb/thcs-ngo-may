@@ -13,7 +13,8 @@ function routes_() {
     approveTask: apiApprove_, requestMore: apiRequestMore_, addAssignee: apiAddAssignee_, removeAssignee: apiRemoveAssignee_, sendMsg: apiSendMsg_,
     downloadTaskFile: apiDownloadTaskFile_,
     uploadDoc: apiUploadDoc_, confirmDoc: apiConfirmDoc_, addAgency: apiAddAgency_, renameAgency: apiRenameAgency_, deleteAgency: apiDeleteAgency_, aiProcess: apiAiProcess_, approveSuggestion: apiApproveSuggestion_, skipSuggestion: apiSkipSuggestion_, deleteDoc: apiDeleteDoc_, downloadDoc: apiDownloadDoc_,
-    addTag: apiAddTag_, renameTag: apiRenameTag_, deleteTag: apiDeleteTag_, updateProfile: apiUpdateProfile_
+    addTag: apiAddTag_, renameTag: apiRenameTag_, deleteTag: apiDeleteTag_, updateProfile: apiUpdateProfile_,
+    addUser: apiAddUser_, updateUser: apiUpdateUser_, setUserActive: apiSetUserActive_, setUserRole: apiSetUserRole_, deleteUser: apiDeleteUser_
   };
 }
 
@@ -21,7 +22,7 @@ function routes_() {
 function apiBootstrap_(u) {
   return {
     v: APP_VERSION, today: today_(), me: me_(u), tasks: tasksView_(u), docs: docsView_(u), notifs: notifsView_(u),
-    people: peopleView_(u), sug: suggestionsView_(u), ai: aiEnabled_() ? 1 : 0,
+    people: peopleView_(u), staff: staffView_(u), sug: suggestionsView_(u), ai: aiEnabled_() ? 1 : 0,
     ags: agencies_().map(function (a) { return { c: a.code, n: a.name, f: a.folder }; }),
     tf: Db.all('DocTags').filter(function (t) { return yes_(t.active); }).reduce(function (m, t) { m[t.tag_name] = typeFolder_(t.tag_name); return m; }, {}),
     tags: Db.all('DocTags').filter(function (t) { return yes_(t.active); }).map(function (t) { return t.tag_name; }),
@@ -37,11 +38,11 @@ function apiReadNotifs_(u) {
   return true;
 }
 function me_(u) {
-  return { id: u.user_id, n: u.full_name, y: u.birth_year === '' ? '' : String(u.birth_year), ad: u.address || '', r: u.position, t: u.department, c: u.campus, role: u.app_role };
+  return { id: u.user_id, n: u.full_name, em: u.email, y: u.birth_year === '' ? '' : String(u.birth_year), g: u.gender || '', ph: phoneView_(u.phone), ad: u.address || '', r: u.position, t: u.department, c: u.campus, role: u.app_role };
 }
-function peopleView_(u) {   // danh sách nhân sự chỉ gửi cho admin và leader
-  if (u.app_role === 'staff') return [];
-  return Db.all('Users').filter(function (x) { return yes_(x.active) && x.app_role !== 'admin'; })
+function peopleView_(u) {   // danh sách nhân sự có thể được giao việc: chỉ gửi cho admin và leader
+  if (!isMgr_(u)) return [];
+  return Db.all('Users').filter(function (x) { return yes_(x.active) && !yes_(x.is_deleted) && x.app_role !== 'admin'; })
     .map(function (x) { return { id: x.user_id, n: x.full_name, t: x.department, c: x.campus, r: x.position }; });
 }
 function notifsView_(u) {
@@ -55,17 +56,18 @@ function userNames_() {
   Db.all('Users').forEach(function (x) { name[x.user_id] = x.full_name; });
   return name;
 }
-function docView_(d, admin, name, u) {
-  return { id: d.doc_id, n: d.name, sz: d.size_bytes, d: String(d.uploaded_at).slice(0, 10), by: name[d.uploaded_by] || '', k: d.tag || '', ok: yes_(d.reviewed) ? 1 : 0, g: d.drive_file_id, ag: code_(d.agency), no: d.doc_no || '', sm: d.summary || '', ai: aiDocView_(d, admin), mine: d.uploaded_by === u.user_id ? 1 : 0 };
+// mgr = admin hoặc leader: xem cả văn bản đang chờ phân loại và đầy đủ gợi ý của AI.
+function docView_(d, mgr, name, u) {
+  return { id: d.doc_id, n: d.name, sz: d.size_bytes, d: String(d.uploaded_at).slice(0, 10), by: name[d.uploaded_by] || '', k: d.tag || '', ok: yes_(d.reviewed) ? 1 : 0, g: d.drive_file_id, ag: code_(d.agency), no: d.doc_no || '', sm: d.summary || '', ai: aiDocView_(d, mgr), mine: d.uploaded_by === u.user_id ? 1 : 0 };
 }
 function docsView_(u) {
-  const admin = isAdmin_(u), name = userNames_();
-  return Db.all('Documents').filter(function (d) { return !yes_(d.is_deleted) && (admin || yes_(d.reviewed) || d.uploaded_by === u.user_id); })
-    .map(function (d) { return docView_(d, admin, name, u); });
+  const mgr = isMgr_(u), name = userNames_();
+  return Db.all('Documents').filter(function (d) { return !yes_(d.is_deleted) && (mgr || yes_(d.reviewed) || d.uploaded_by === u.user_id); })
+    .map(function (d) { return docView_(d, mgr, name, u); });
 }
 function tasksView_(u, onlyId) {
-  const admin = isAdmin_(u), name = {}, role = {};
-  Db.all('Users').forEach(function (x) { name[x.user_id] = x.full_name; role[x.user_id] = x.app_role; });
+  const admin = isAdmin_(u), name = {}, role = {}, pos = {};
+  Db.all('Users').forEach(function (x) { name[x.user_id] = x.full_name; role[x.user_id] = x.app_role; pos[x.user_id] = x.position; });
   const nm = function (id) { return name[id] || id; };
   const docById = {};
   Db.all('Documents').forEach(function (d) { docById[d.doc_id] = d; });
@@ -73,7 +75,8 @@ function tasksView_(u, onlyId) {
     P = group_(Db.all('ProgressReports'), 'task_id'), X = group_(Db.all('Extensions'), 'task_id'), M = group_(Db.all('Messages'), 'task_id'), H = group_(Db.all('History'), 'task_id');
   const asc = function (k) { return function (a, b) { return String(a[k]) < String(b[k]) ? -1 : String(a[k]) > String(b[k]) ? 1 : 0; }; };
   return Db.all('Tasks').filter(function (t) {
-    return !yes_(t.is_deleted) && (!onlyId || t.task_id === onlyId) && (admin || (A[t.task_id] || []).some(function (a) { return a.user_id === u.user_id; }));
+    // Hiệu trưởng thấy mọi nhiệm vụ; người khác thấy nhiệm vụ mình được giao HOẶC do mình tạo (leader giám sát).
+    return !yes_(t.is_deleted) && (!onlyId || t.task_id === onlyId) && (admin || t.created_by === u.user_id || (A[t.task_id] || []).some(function (a) { return a.user_id === u.user_id; }));
   }).map(function (t) {
     const id = t.task_id, as = A[id] || [], fmap = {}, files = (F[id] || []).slice();
     files.forEach(function (f) {   // tên hiển thị duy nhất trong một nhiệm vụ
@@ -87,6 +90,8 @@ function tasksView_(u, onlyId) {
       src: t.src_doc ? (docById[t.src_doc] && !yes_(docById[t.src_doc].is_deleted) ? { id: t.src_doc, n: docById[t.src_doc].name, g: docById[t.src_doc].drive_file_id } : { id: t.src_doc, n: '', gone: 1 }) : null,
       docs: (TD[id] || []).filter(function (x) { return docById[x.doc_id] && !yes_(docById[x.doc_id].is_deleted); }).map(function (x) { return { id: x.doc_id, n: docById[x.doc_id].name, g: docById[x.doc_id].drive_file_id }; }),
       due: t.due_date, st: t.status, made: String(t.created_at).slice(0, 10), review: t.review_comment || '',
+      // người tạo: tên, mã, chức vụ (Hiệu trưởng nếu là admin)
+      by: nm(t.created_by), byId: t.created_by, byP: role[t.created_by] === 'admin' ? 'Hiệu trưởng' : (pos[t.created_by] || ''),
       as: as.map(function (a) { return nm(a.user_id); }),
       // chi tiết người thực hiện: by = 'a' nếu do Hiệu trưởng (admin) giao, 'l' nếu do leader thêm
       asx: as.map(function (a) { return { id: a.user_id, n: nm(a.user_id), by: addedByAdmin_(a) ? 'a' : 'l', byN: a.added_by ? nm(a.added_by) : '' }; }),
@@ -121,7 +126,25 @@ function member_(u, id) {
   if (!a) throw new AppError('Bạn không được giao nhiệm vụ này', 'FORBIDDEN');
   return a;
 }
-function access_(u, id) { const t = task_(id); if (!isAdmin_(u)) member_(u, id); return t; }
+// Được xem/trao đổi trong nhiệm vụ: Hiệu trưởng, người tạo nhiệm vụ, người được giao.
+function access_(u, id) { const t = task_(id); if (!isAdmin_(u) && t.created_by !== u.user_id) member_(u, id); return t; }
+// "Chủ" nhiệm vụ (duyệt kết quả, gia hạn, sửa, xóa): Hiệu trưởng với mọi nhiệm vụ; leader với nhiệm vụ DO MÌNH TẠO.
+function owner_(u, t) { return isAdmin_(u) || (isLeader_(u) && t.created_by === u.user_id); }
+function ownTask_(u, id) {
+  const t = task_(String(id));
+  if (!owner_(u, t)) throw new AppError('Bạn chỉ xử lý được nhiệm vụ do mình tạo', 'FORBIDDEN');
+  return t;
+}
+// Người cần nhận thông báo khi nhân viên tiếp nhận / báo tiến độ / nộp / xin gia hạn:
+// leader tạo nhiệm vụ (nếu tài khoản còn hoạt động và vẫn là leader), ngược lại là Hiệu trưởng ('ADMIN').
+function boss_(t) {
+  const c = userById_(t.created_by);
+  return c && isLeader_(c) && yes_(c.active) && !yes_(c.is_deleted) ? c.user_id : 'ADMIN';
+}
+function notifyBoss_(t, text, actorId) { const b = boss_(t); if (b !== actorId) notify_(b, text, t.task_id); }
+function leaderCreator_(t) { const b = boss_(t); return b === 'ADMIN' ? '' : b; }
+// Tên hiển thị của người thao tác trong lịch sử
+function who_(u) { return isAdmin_(u) ? 'Hiệu trưởng' : (u.position ? u.position + ' ' : '') + u.full_name; }
 function setTask_(t, patch) { patch.updated_at = now_(); Db.update('Tasks', t._row, patch); }
 function hist_(id, actor, action, detail) {
   Db.append('History', { hist_id: Db.nextId('History', 'hist_id', 'H', 4), task_id: id, actor_id: actor, action: action, detail: detail, at: now_() });
@@ -194,7 +217,7 @@ function refDocs_(ids) {
 }
 // ===================== NHIỆM VỤ: ADMIN =====================
 function apiCreateTask_(u, r) {
-  admin_(u);
+  mgr_(u);   // Hiệu trưởng và leader đều tạo được nhiệm vụ
   const title = str_(r.title, 200, 'Tên nhiệm vụ', true), desc = str_(r.desc, 3000, 'Nội dung chi tiết'),
     pri = oneOf_(r.pri || 'Trung bình', LISTS.pri, 'Mức ưu tiên'), due = date_(r.due, 'Thời hạn');
   if (due < today_()) throw new AppError('Thời hạn phải từ hôm nay trở đi', 'BAD');
@@ -218,12 +241,12 @@ function apiCreateTask_(u, r) {
   });
   saveTaskFiles_(id, 'giao', fls, u.user_id, at);
   refDocs.forEach(function (docId) { Db.append('TaskDocs', { row_id: Db.nextId('TaskDocs', 'row_id', 'D', 3), task_id: id, doc_id: docId, added_by: u.user_id, added_at: at }); });
-  hist_(id, u.user_id, 'giao', 'Hiệu trưởng giao nhiệm vụ');
+  hist_(id, u.user_id, 'giao', who_(u) + ' giao nhiệm vụ');
   return { id: id };
 }
 function apiEditTask_(u, r) {
-  admin_(u);
-  const t = task_(r.id), keep = r.keep || [];
+  const t = ownTask_(u, r.id), keep = r.keep || [];
+  if (!isAdmin_(u) && t.status === 'Đã hoàn thành') throw new AppError('Nhiệm vụ đã hoàn thành, chỉ Hiệu trưởng được chỉnh sửa', 'FORBIDDEN');
   const title = str_(r.title, 200, 'Tên nhiệm vụ', true), desc = str_(r.desc, 3000, 'Nội dung chi tiết'), pri = oneOf_(r.pri, LISTS.pri, 'Mức ưu tiên');
   const fls = files_(r.files), at = now_(), refDocs = Array.isArray(r.docs) ? refDocs_(r.docs) : null;
   // Nhân sự: r.as là danh sách user_id MỚI (nếu gửi lên). Kiểm tra hết trước khi ghi bất cứ thứ gì.
@@ -243,6 +266,7 @@ function apiEditTask_(u, r) {
       addIds.push(id);
     });
     dropRows = cur.filter(function (a) { return !want[a.user_id]; });
+    if (!isAdmin_(u) && dropRows.some(addedByAdmin_)) throw new AppError('Không thể bớt người do Hiệu trưởng phân công', 'FORBIDDEN');
   }
   // tên hiển thị -> file_id, phải tính giống tasksView_ để khớp với danh sách giao diện đang giữ
   const given = Db.all('TaskFiles').filter(function (f) { return f.task_id === t.task_id; }), fmap = {};
@@ -257,7 +281,7 @@ function apiEditTask_(u, r) {
     refDocs.forEach(function (docId) { Db.append('TaskDocs', { row_id: Db.nextId('TaskDocs', 'row_id', 'D', 3), task_id: t.task_id, doc_id: docId, added_by: u.user_id, added_at: at }); });
   }
   setTask_(t, { title: title, description: desc, priority: pri });
-  hist_(t.task_id, u.user_id, 'sua', 'Hiệu trưởng chỉnh sửa nội dung và tài liệu nhiệm vụ');
+  hist_(t.task_id, u.user_id, 'sua', who_(u) + ' chỉnh sửa nội dung và tài liệu nhiệm vụ');
   notifyMembers_(t.task_id, 'Nhiệm vụ ' + t.task_id + ' đã được cập nhật', '');
   addIds.forEach(function (id) { addMember_(u, t, userById_(id)); });
   dropRows.forEach(function (a) { dropMember_(u, t, a); });
@@ -274,38 +298,53 @@ function purgeTaskData_(taskId) {
   });
   return n;
 }
+// Leader chỉ xóa được nhiệm vụ do mình tạo và chưa hoàn thành; nhiệm vụ đã hoàn thành chỉ Hiệu trưởng xóa được.
 function apiDeleteTask_(u, r) {
-  admin_(u);
-  const t = task_(r.id);
+  const t = ownTask_(u, r.id);
+  if (!isAdmin_(u) && t.status === 'Đã hoàn thành') throw new AppError('Nhiệm vụ đã hoàn thành chỉ Hiệu trưởng được xóa', 'FORBIDDEN');
   purgeTaskData_(t.task_id);
   setTask_(t, { is_deleted: true, title: '(đã xóa)', description: '', review_comment: '', ext_pending: false });
   return true;
 }
+// Duyệt kết quả – 2 cấp với nhiệm vụ do leader tạo:
+//  - leader (người tạo) duyệt: 'Chờ duyệt' → 'Chờ Hiệu trưởng duyệt' (chưa hoàn thành)
+//  - Hiệu trưởng duyệt: 'Chờ duyệt' hoặc 'Chờ Hiệu trưởng duyệt' → 'Đã hoàn thành'
 function apiApprove_(u, r) {
-  admin_(u);
-  const t = task_(r.id);
-  if (t.status !== 'Chờ duyệt') throw new AppError('Nhiệm vụ này chưa có kết quả chờ duyệt', 'BAD');
+  const t = ownTask_(u, r.id), admin = isAdmin_(u);
+  const okSt = admin ? ['Chờ duyệt', 'Chờ Hiệu trưởng duyệt'] : ['Chờ duyệt'];
+  if (okSt.indexOf(t.status) < 0) throw new AppError(t.status === 'Chờ Hiệu trưởng duyệt' ? 'Bạn đã duyệt kết quả này, đang chờ Hiệu trưởng duyệt cuối' : 'Nhiệm vụ này chưa có kết quả chờ duyệt', 'BAD');
   const last = Db.all('Submissions').filter(function (s) { return s.task_id === t.task_id; }).pop();
+  if (!admin) {
+    if (last) Db.update('Submissions', last._row, { result: 'Leader đã duyệt' });
+    setTask_(t, { status: 'Chờ Hiệu trưởng duyệt', review_comment: '' });
+    hist_(t.task_id, u.user_id, 'duyet_cap_1', who_(u) + ' duyệt kết quả, chuyển Hiệu trưởng duyệt cuối');
+    notify_('ADMIN', u.full_name + ' đã duyệt kết quả ' + t.task_id + ', chờ Hiệu trưởng duyệt cuối', t.task_id);
+    notifyMembers_(t.task_id, 'Kết quả ' + t.task_id + ' đã được ' + u.full_name + ' duyệt, chờ Hiệu trưởng duyệt cuối', u.user_id);
+    return true;
+  }
   if (last) Db.update('Submissions', last._row, { result: 'Đã duyệt' });
   setTask_(t, { status: 'Đã hoàn thành', review_comment: '' });
   hist_(t.task_id, u.user_id, 'duyet', 'Hiệu trưởng xác nhận hoàn thành');
   notifyMembers_(t.task_id, 'Kết quả ' + t.task_id + ' đã được xác nhận hoàn thành', '');
+  const lc = leaderCreator_(t);
+  if (lc && !assignees_(t.task_id).some(function (a) { return a.user_id === lc; })) notify_(lc, 'Hiệu trưởng đã xác nhận hoàn thành ' + t.task_id, t.task_id);
   return true;
 }
 function apiRequestMore_(u, r) {
-  admin_(u);
-  const t = task_(r.id), c = str_(r.comment, 1000, 'Nhận xét', true);
-  if (t.status !== 'Chờ duyệt') throw new AppError('Nhiệm vụ này chưa có kết quả chờ duyệt', 'BAD');
+  const t = ownTask_(u, r.id), c = str_(r.comment, 1000, 'Nhận xét', true);
+  const okSt = isAdmin_(u) ? ['Chờ duyệt', 'Chờ Hiệu trưởng duyệt'] : ['Chờ duyệt'];
+  if (okSt.indexOf(t.status) < 0) throw new AppError(t.status === 'Chờ Hiệu trưởng duyệt' ? 'Kết quả đang chờ Hiệu trưởng duyệt cuối' : 'Nhiệm vụ này chưa có kết quả chờ duyệt', 'BAD');
   const last = Db.all('Submissions').filter(function (s) { return s.task_id === t.task_id; }).pop();
   if (last) Db.update('Submissions', last._row, { result: 'Yêu cầu bổ sung', reviewer_comment: c });
   setTask_(t, { status: 'Yêu cầu bổ sung', review_comment: c });
-  hist_(t.task_id, u.user_id, 'yeu_cau_bo_sung', 'Hiệu trưởng yêu cầu bổ sung: ' + c);
+  hist_(t.task_id, u.user_id, 'yeu_cau_bo_sung', who_(u) + ' yêu cầu bổ sung: ' + c);
   notifyMembers_(t.task_id, 'Yêu cầu bổ sung kết quả ' + t.task_id, '');
+  const lc = leaderCreator_(t);
+  if (lc && lc !== u.user_id && !assignees_(t.task_id).some(function (a) { return a.user_id === lc; })) notify_(lc, 'Hiệu trưởng yêu cầu bổ sung kết quả ' + t.task_id, t.task_id);
   return true;
 }
 function apiDecideExt_(u, r) {
-  admin_(u);
-  const t = task_(r.id), x = Db.all('Extensions').filter(function (e) { return e.task_id === t.task_id && e.status === 'Chờ xử lý'; }).pop();
+  const t = ownTask_(u, r.id), x = Db.all('Extensions').filter(function (e) { return e.task_id === t.task_id && e.status === 'Chờ xử lý'; }).pop();
   if (!x) throw new AppError('Không có đề nghị gia hạn đang chờ', 'BAD');
   const at = now_();
   if (r.ok) {
@@ -323,13 +362,12 @@ function apiDecideExt_(u, r) {
   return true;
 }
 function apiExtend_(u, r) {
-  admin_(u);
-  const t = task_(r.id), d = date_(r.date, 'Thời hạn mới'), at = now_();
+  const t = ownTask_(u, r.id), d = date_(r.date, 'Thời hạn mới'), at = now_();
   if (d <= t.due_date) throw new AppError('Thời hạn mới phải sau thời hạn hiện tại', 'BAD');
   Db.all('Extensions').filter(function (e) { return e.task_id === t.task_id && e.status === 'Chờ xử lý'; }).forEach(function (e) {
-    Db.update('Extensions', e._row, { status: 'Từ chối', decided_by: u.user_id, decided_at: at, decision_note: 'Hiệu trưởng đã gia hạn trực tiếp' });
+    Db.update('Extensions', e._row, { status: 'Từ chối', decided_by: u.user_id, decided_at: at, decision_note: who_(u) + ' đã gia hạn trực tiếp' });
   });
-  Db.append('Extensions', { ext_id: Db.nextId('Extensions', 'ext_id', 'E', 3), task_id: t.task_id, requested_by: u.user_id, old_due: t.due_date, new_due: d, reason: 'Hiệu trưởng gia hạn trực tiếp', status: 'Gia hạn trực tiếp', decided_by: u.user_id, decided_at: at, requested_at: at });
+  Db.append('Extensions', { ext_id: Db.nextId('Extensions', 'ext_id', 'E', 3), task_id: t.task_id, requested_by: u.user_id, old_due: t.due_date, new_due: d, reason: who_(u) + ' gia hạn trực tiếp', status: 'Gia hạn trực tiếp', decided_by: u.user_id, decided_at: at, requested_at: at });
   setTask_(t, { due_date: d, ext_pending: false });
   notifyMembers_(t.task_id, 'Thời hạn ' + t.task_id + ' đổi thành ' + d.split('-').reverse().join('/'), '');
   return true;
@@ -343,7 +381,7 @@ function apiAccept_(u, r) {
   Db.update('TaskAssignees', a._row, { accepted_at: now_() });
   if (t.status === 'Chưa tiếp nhận') setTask_(t, { status: 'Đang thực hiện' });
   hist_(t.task_id, u.user_id, 'tiep_nhan', u.full_name + ' xác nhận tiếp nhận');
-  notify_('ADMIN', u.full_name + ' đã tiếp nhận ' + t.task_id, t.task_id);
+  notifyBoss_(t, u.full_name + ' đã tiếp nhận ' + t.task_id, u.user_id);
   return true;
 }
 function acceptedMember_(u, t) {
@@ -357,36 +395,38 @@ function apiProgress_(u, r) {
   const fls = files_(r.files), at = now_();
   Db.append('ProgressReports', { report_id: Db.nextId('ProgressReports', 'report_id', 'P', 3), task_id: t.task_id, user_id: u.user_id, done: done, result: res, remaining: left, reported_at: at });
   saveTaskFiles_(t.task_id, 'tien_do', fls, u.user_id, at);
-  notify_('ADMIN', u.full_name + ' cập nhật tiến độ ' + t.task_id, t.task_id);
+  notifyBoss_(t, u.full_name + ' cập nhật tiến độ ' + t.task_id, u.user_id);
   return true;
 }
 // Mọi thành viên đã tiếp nhận đều được nộp như nhau, kể cả khi đồng đội đã nộp hoặc khi Hiệu trưởng yêu cầu bổ sung.
 function apiSubmit_(u, r) {
   const t = task_(r.id); acceptedMember_(u, t);
+  if (t.status === 'Chờ Hiệu trưởng duyệt') throw new AppError('Kết quả đã được duyệt ở cấp tổ, đang chờ Hiệu trưởng duyệt cuối', 'BAD');
   const text = str_(r.text, 3000, 'Báo cáo hoàn thành', true), note = str_(r.note, 1000, 'Ghi chú'), fls = files_(r.files), at = now_();
   Db.append('Submissions', { sub_id: Db.nextId('Submissions', 'sub_id', 'S', 3), task_id: t.task_id, submitted_by: u.user_id, content: text, note: note, submitted_at: at, result: 'Chờ duyệt', reviewer_comment: '' });
   saveTaskFiles_(t.task_id, 'nop', fls, u.user_id, at);
   setTask_(t, { status: 'Chờ duyệt' });
   hist_(t.task_id, u.user_id, 'nop', u.full_name + ' nộp kết quả');
-  notify_('ADMIN', u.full_name + ' đã nộp kết quả ' + t.task_id, t.task_id);
+  notifyBoss_(t, u.full_name + ' đã nộp kết quả ' + t.task_id, u.user_id);
   return true;
 }
 function apiRequestExt_(u, r) {
   const t = task_(r.id); member_(u, t.task_id);
-  if (t.status === 'Đã hoàn thành' || t.status === 'Chờ duyệt') throw new AppError('Không thể xin gia hạn ở trạng thái hiện tại', 'BAD');
+  if (['Đã hoàn thành', 'Chờ duyệt', 'Chờ Hiệu trưởng duyệt'].indexOf(t.status) >= 0) throw new AppError('Không thể xin gia hạn ở trạng thái hiện tại', 'BAD');
   if (Db.all('Extensions').some(function (e) { return e.task_id === t.task_id && e.status === 'Chờ xử lý'; })) throw new AppError('Đã có đề nghị gia hạn đang chờ xử lý', 'BAD');
   const to = date_(r.to, 'Thời hạn đề nghị'), why = str_(r.why, 1000, 'Lý do', true);
   if (to <= t.due_date) throw new AppError('Thời hạn mới phải sau thời hạn hiện tại', 'BAD');
   Db.append('Extensions', { ext_id: Db.nextId('Extensions', 'ext_id', 'E', 3), task_id: t.task_id, requested_by: u.user_id, old_due: t.due_date, new_due: to, reason: why, status: 'Chờ xử lý', requested_at: now_() });
   setTask_(t, { ext_pending: true });
   hist_(t.task_id, u.user_id, 'xin_gia_han', u.full_name + ' xin gia hạn đến ' + to.split('-').reverse().join('/'));
-  notify_('ADMIN', u.full_name + ' xin gia hạn ' + t.task_id, t.task_id);
+  notifyBoss_(t, u.full_name + ' xin gia hạn ' + t.task_id, u.user_id);
   return true;
 }
 // ===================== NHIỆM VỤ: NHÂN SỰ =====================
-// Quyền được xét theo VAI TRÒ (cột app_role trong sheet Users), không theo chức vụ:
+// Quyền CHỈ xét theo VAI TRÒ (cột app_role trong sheet Users: admin / leader / staff), KHÔNG xét chức vụ (position).
+// Một vai trò có thể gồm nhiều chức vụ (leader: Phó hiệu trưởng, Tổ trưởng, Tổ phó chuyên môn…); chức vụ chỉ để hiển thị.
 //  - admin (Hiệu trưởng): thêm/bớt bất kỳ ai, kể cả người do leader thêm (qua form "Sửa nhiệm vụ").
-//  - leader đang được giao nhiệm vụ: thêm người (Phó hiệu trưởng: bất kỳ ai; leader khác: người cùng tổ chuyên môn),
+//  - leader đang được giao nhiệm vụ: thêm bất kỳ nhân sự nào đang hoạt động (trừ Hiệu trưởng),
 //    và bớt người do leader thêm. KHÔNG bớt được người do Hiệu trưởng giao, không tự rút mình khỏi nhiệm vụ.
 //  - staff: không thêm/bớt.
 // Dòng cũ không ghi người thêm (added_by trống) được coi là do Hiệu trưởng giao.
@@ -396,24 +436,22 @@ function addedByAdmin_(a) {
   return !x || x.app_role === 'admin';
 }
 function leaderManage_(u, t) {
-  if (u.app_role !== 'leader') throw new AppError('Bạn không có quyền điều chỉnh nhân sự nhiệm vụ', 'FORBIDDEN');
-  member_(u, t.task_id);
+  if (!isLeader_(u)) throw new AppError('Bạn không có quyền điều chỉnh nhân sự nhiệm vụ', 'FORBIDDEN');
+  if (t.created_by !== u.user_id) member_(u, t.task_id);   // leader tạo nhiệm vụ hoặc leader được giao
   if (t.status === 'Đã hoàn thành') throw new AppError('Nhiệm vụ đã hoàn thành', 'BAD');
 }
 function addMember_(u, t, x) {
   Db.append('TaskAssignees', { row_id: Db.nextId('TaskAssignees', 'row_id', 'A', 3), task_id: t.task_id, user_id: x.user_id, accepted_at: '', added_by: u.user_id, added_at: now_() });
-  const who = isAdmin_(u) ? 'Hiệu trưởng' : (u.position ? u.position + ' ' : '') + u.full_name;
-  hist_(t.task_id, u.user_id, 'them_nguoi', who + ' thêm ' + x.full_name + ' vào nhiệm vụ');
+  hist_(t.task_id, u.user_id, 'them_nguoi', who_(u) + ' thêm ' + x.full_name + ' vào nhiệm vụ');
   notify_(x.user_id, 'Bạn được thêm vào nhiệm vụ ' + t.task_id + ': ' + t.title, t.task_id);
-  if (!isAdmin_(u)) notify_('ADMIN', u.full_name + ' thêm ' + x.full_name + ' vào ' + t.task_id, t.task_id);
+  if (!isAdmin_(u)) notifyBoss_(t, u.full_name + ' thêm ' + x.full_name + ' vào ' + t.task_id, u.user_id);
 }
 function dropMember_(u, t, a) {
   Db.removeWhere('TaskAssignees', function (r) { return r.task_id === t.task_id && r.user_id === a.user_id; });
   const x = userById_(a.user_id), xn = x ? x.full_name : a.user_id;
-  const who = isAdmin_(u) ? 'Hiệu trưởng' : (u.position ? u.position + ' ' : '') + u.full_name;
-  hist_(t.task_id, u.user_id, 'bot_nguoi', who + ' đưa ' + xn + ' ra khỏi nhiệm vụ');
+  hist_(t.task_id, u.user_id, 'bot_nguoi', who_(u) + ' đưa ' + xn + ' ra khỏi nhiệm vụ');
   notify_(a.user_id, 'Bạn không còn tham gia nhiệm vụ ' + t.task_id + ': ' + t.title, t.task_id);
-  if (!isAdmin_(u)) notify_('ADMIN', u.full_name + ' đưa ' + xn + ' ra khỏi ' + t.task_id, t.task_id);
+  if (!isAdmin_(u)) notifyBoss_(t, u.full_name + ' đưa ' + xn + ' ra khỏi ' + t.task_id, u.user_id);
 }
 function apiAddAssignee_(u, r) {
   const t = task_(String(r.id));
@@ -421,7 +459,6 @@ function apiAddAssignee_(u, r) {
   else leaderManage_(u, t);
   const x = userById_(String(r.userId));
   if (!x || !yes_(x.active) || x.app_role === 'admin') throw new AppError('Người được thêm không hợp lệ', 'BAD');
-  if (!isAdmin_(u) && u.position !== 'Phó hiệu trưởng' && x.department !== u.department) throw new AppError('Bạn chỉ được thêm nhân sự cùng tổ chuyên môn (' + u.department + ')', 'FORBIDDEN');
   if (assignees_(t.task_id).some(function (a) { return a.user_id === x.user_id; })) throw new AppError('Người này đã có trong nhiệm vụ', 'BAD');
   addMember_(u, t, x);
   return true;
@@ -433,7 +470,7 @@ function apiRemoveAssignee_(u, r) {
   const all = assignees_(t.task_id), a = all.find(function (x) { return x.user_id === String(r.userId); });
   if (!a) throw new AppError('Người này không có trong nhiệm vụ', 'BAD');
   if (!isAdmin_(u)) {
-    if (a.user_id === u.user_id) throw new AppError('Bạn không thể tự rút khỏi nhiệm vụ. Hãy liên hệ Hiệu trưởng.', 'FORBIDDEN');
+    if (a.user_id === u.user_id && t.created_by !== u.user_id) throw new AppError('Bạn không thể tự rút khỏi nhiệm vụ. Hãy liên hệ Hiệu trưởng.', 'FORBIDDEN');
     if (addedByAdmin_(a)) throw new AppError('Không thể bớt người do Hiệu trưởng phân công', 'FORBIDDEN');
   }
   if (all.length <= 1) throw new AppError('Nhiệm vụ phải có ít nhất một người thực hiện', 'BAD');
@@ -443,8 +480,14 @@ function apiRemoveAssignee_(u, r) {
 function apiSendMsg_(u, r) {
   const t = access_(u, String(r.id)), text = str_(r.text, 2000, 'Tin nhắn', true);
   Db.append('Messages', { msg_id: Db.nextId('Messages', 'msg_id', 'M', 4), task_id: t.task_id, sender_id: u.user_id, text: text, sent_at: now_() });
-  if (isAdmin_(u)) notifyMembers_(t.task_id, 'Tin nhắn mới về ' + t.task_id, '');
-  else notify_('ADMIN', 'Tin nhắn mới về ' + t.task_id + ' từ ' + u.full_name, t.task_id);
+  const isMember = assignees_(t.task_id).some(function (a) { return a.user_id === u.user_id; });
+  if (isAdmin_(u) || (t.created_by === u.user_id && !isMember)) {
+    notifyMembers_(t.task_id, 'Tin nhắn mới về ' + t.task_id, u.user_id);
+    const lc = leaderCreator_(t);
+    if (lc && lc !== u.user_id && !assignees_(t.task_id).some(function (a) { return a.user_id === lc; })) notify_(lc, 'Tin nhắn mới về ' + t.task_id, t.task_id);
+  } else {
+    notifyBoss_(t, 'Tin nhắn mới về ' + t.task_id + ' từ ' + u.full_name, u.user_id);
+  }
   return true;
 }
 function apiDownloadTaskFile_(u, r) {

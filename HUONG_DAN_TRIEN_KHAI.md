@@ -106,15 +106,16 @@ Mở Google Sheet vừa tạo → sheet **Users**. Mỗi nhân viên một dòng
 | `user_id` | Mã duy nhất | `U002`, `U003`, … không trùng |
 | `full_name` | Họ tên hiển thị | **Không được trùng nhau** (hệ thống nhận diện người trong nhiệm vụ theo tên) |
 | `email` | Gmail đăng nhập | Viết thường, đúng địa chỉ Google nhận diện; mỗi email một dòng |
-| `birth_year`, `address` | Hồ sơ | Có thể để trống |
-| `position` | Chức vụ | `Phó hiệu trưởng`, `Tổ trưởng chuyên môn`, `Giáo viên`, `Nhân viên` |
-| `app_role` | Quyền trong hệ thống | `admin` (Hiệu trưởng), `leader` (Phó hiệu trưởng và Tổ trưởng), `staff` (còn lại) |
+| `birth_year`, `address`, `gender`, `phone` | Hồ sơ (năm sinh, địa chỉ, giới tính `Nam`/`Nữ`, số điện thoại) | Có thể để trống. Nên định dạng cột `phone` là *Văn bản thuần* để Sheets không xóa số 0 đầu |
+| `position` | Chức vụ (chỉ để hiển thị, **không** ảnh hưởng quyền) | ví dụ `Phó hiệu trưởng`, `Tổ trưởng chuyên môn`, `Tổ phó chuyên môn`, `Giáo viên`, `Nhân viên` |
+| `app_role` | Quyền trong hệ thống — **quyền chỉ xét theo cột này** | `admin` (Hiệu trưởng: toàn quyền), `leader` (tạo và giám sát nhiệm vụ do mình tạo, duyệt cấp 1, tải và phân loại văn bản, nhận đề xuất AI; xem mục 15), `staff` (thực hiện nhiệm vụ). Một vai trò có thể gồm nhiều chức vụ, ví dụ leader có thể là Phó hiệu trưởng, Tổ trưởng hay Tổ phó chuyên môn. |
 | `department` | Tổ chuyên môn | Đúng một trong 8 tổ (xem `LISTS.dept` trong Code.gs) |
 | `campus` | Cơ sở | `Trường chính` hoặc `Phân hiệu` |
-| `active` | Còn làm việc | `TRUE` hoặc `FALSE` |
+| `active` | Được phép truy cập | `TRUE` hoặc `FALSE` (tạm dừng) |
+| `is_deleted` | Đã xóa (nghỉ việc) | Để trống hoặc `FALSE`. Hệ thống tự ghi `TRUE` khi Hiệu trưởng xóa nhân sự ở mục Nhân sự |
 | `created_at` | Ngày tạo | Dạng `2026-09-01T08:00:00` |
 
-Sau khi nhập, quay lại Apps Script chạy hàm **`checkUsers`**. Nó báo email trùng, họ tên trùng, giá trị sai danh mục, hoặc người có chức vụ leader nhưng `app_role` đang là `staff`.
+Sau khi nhập, quay lại Apps Script chạy hàm **`checkUsers`**. Nó báo email trùng, họ tên trùng, giá trị sai danh mục, hoặc `app_role` không phải `admin`/`leader`/`staff`.
 
 **Quan trọng khi sửa sheet bằng tay:** không xóa hoặc đổi tên dòng tiêu đề (dòng 1), không chèn dòng trống giữa dữ liệu, không để trống cột đầu của một dòng có dữ liệu. Các sheet khác (Tasks, Documents…) do hệ thống tự ghi, hạn chế sửa tay.
 
@@ -173,9 +174,9 @@ Lưu, chờ 1–5 phút để áp dụng, rồi mở địa chỉ Cloudflare và
 
 | Việc | Cách làm |
 |---|---|
-| Thêm nhân viên mới | Thêm một dòng vào sheet `Users` (`active = TRUE`), chạy `checkUsers`. Có hiệu lực ngay. |
-| Nhân viên thôi việc | Đổi `active` thành `FALSE` trong sheet `Users`. Mất quyền trong tối đa **90 giây** (độ trễ của bộ nhớ đệm, xem mục 13), không cần chờ hết phiên. Muốn có hiệu lực ngay, chạy hàm `clearCache` trong Apps Script. |
-| Đổi chức vụ, tổ, cơ sở | Hiệu trưởng sửa trong hồ sơ cá nhân (chỉ Hiệu trưởng sửa được), hoặc sửa trực tiếp trong sheet `Users`. Nếu lên Tổ trưởng/Phó hiệu trưởng nhớ đổi `app_role` thành `leader`. |
+| Thêm nhân viên mới | Hiệu trưởng vào mục **Nhân sự → + Thêm nhân sự** trên website. Có hiệu lực ngay. (Vẫn có thể thêm dòng trực tiếp vào sheet `Users` rồi chạy `checkUsers`.) |
+| Nhân viên thôi việc | Mục **Nhân sự** → bấm tên → **Tạm dừng truy cập** (nghỉ tạm) hoặc **Xóa nhân sự** (nghỉ hẳn). Có hiệu lực ngay. Cách cũ: đổi `active` thành `FALSE` trong sheet `Users`. Mất quyền trong tối đa **90 giây** (độ trễ của bộ nhớ đệm, xem mục 13), không cần chờ hết phiên. Muốn có hiệu lực ngay, chạy hàm `clearCache` trong Apps Script. |
+| Đổi chức vụ, tổ, cơ sở, phân quyền | Mục **Nhân sự** → bấm tên → **Sửa thông tin** hoặc **Lưu phân quyền**. Đổi chức vụ **không** làm thay đổi quyền; quyền chỉ theo `app_role` (admin/leader/staff). Đổi trên website có hiệu lực ngay; sửa tay trong sheet có hiệu lực sau tối đa 90 giây. |
 | Nhân viên không đăng nhập được | Xem thông báo lỗi trên màn hình đăng nhập (có ghi email Google nhận diện) và đối chiếu với cột `email` trong sheet `Users`. |
 | Xem dung lượng Drive | Vào <https://drive.google.com/settings/storage>. Tài khoản cá nhân có 15 GB dùng chung với Gmail. Nên kiểm tra mỗi học kỳ; khi gần đầy, lưu trữ thư mục `NopBai` của năm cũ về máy rồi xóa. |
 | Sao lưu | Tự động mỗi tuần nếu đã chạy `installWeeklyBackup`. Có thể chạy `backup` bất kỳ lúc nào. Google Sheets cũng có lịch sử phiên bản (File → Version history). |
@@ -385,3 +386,30 @@ Xem lỗi chi tiết: Apps Script → **Executions** (Nhật ký thực thi).
 - Thông báo quá 30 ngày bị xóa hẳn khỏi sheet `Notifications`.
 - Chạy hàm `installCleanupTrigger` một lần để mỗi ngày (khoảng 2 giờ sáng) hệ thống tự dọn. Hàm `dailyCleanup` chạy tay được, và cũng dọn luôn các đề xuất “skipped” còn sót từ bản cũ.
 - Triển khai: dán lại `Ai.gs`, `Code.gs`, `Setup.gs`, New version, `/exec` phải thấy `ai-7`.
+
+## 15. Bản ai-11: mục Nhân sự, leader tạo nhiệm vụ, duyệt 2 cấp
+
+### 15.1 Triển khai
+1. Dán lại **tất cả** file `.gs` đã đổi: `Ai.gs`, `Api.gs`, `Auth.gs`, `Code.gs`, `Db.gs`, `Docs.gs`, `Setup.gs`.
+2. Chạy hàm **`upgrade`** một lần: thêm cột `gender`, `phone`, `is_deleted` vào sheet `Users`.
+3. **Deploy → Manage deployments → bút chì → New version → Deploy**. Mở `/exec` phải thấy `ai-11`.
+4. Đưa lại `frontend/app.js` và `frontend/index.html` (phiên bản giao diện 14) lên Cloudflare Pages.
+
+### 15.2 Mục Nhân sự (chỉ Hiệu trưởng)
+- Danh sách toàn bộ nhân sự: họ tên, chức vụ, tổ chuyên môn, cơ sở, trạng thái tài khoản, phân quyền. Lọc theo chức vụ, tổ, cơ sở, trạng thái, phân quyền; tìm theo tên, email, số điện thoại.
+- Bấm tên → cửa sổ chi tiết (tên, email, năm sinh, giới tính, SĐT, địa chỉ, chức vụ, tổ, cơ sở) với các nút: **Sửa thông tin**, **Lưu phân quyền**, **Tạm dừng / Mở lại truy cập**, **Xóa nhân sự**.
+- **Xóa nhân sự**: tài khoản bị khóa vĩnh viễn và ẩn khỏi danh sách; người đó được đưa ra khỏi các nhiệm vụ chưa hoàn thành (không xóa được nếu đang là người thực hiện duy nhất – hãy giao lại trước). Dòng trong sheet `Users` vẫn giữ (`is_deleted = TRUE`) để lịch sử nhiệm vụ cũ hiện đúng tên. Có thể thêm lại người cùng email sau này (mã mới).
+- Hiệu trưởng không tự hạ quyền, tạm dừng, xóa hay đổi email đăng nhập của chính mình; hệ thống luôn giữ ít nhất một admin đang hoạt động.
+- Mọi người vẫn tự sửa hồ sơ (họ tên, năm sinh, giới tính, SĐT, địa chỉ) ở mục hồ sơ cá nhân.
+
+### 15.3 Leader
+- Có thêm các mục: **Tạo nhiệm vụ**, **Đề xuất nhiệm vụ từ AI**, **Giám sát tiến độ** (nhiệm vụ do mình tạo), **Tải văn bản** (tải lên và phân loại). Mục **Nhiệm vụ của tôi** là các nhiệm vụ được giao.
+- Với nhiệm vụ do mình tạo: duyệt kết quả, yêu cầu bổ sung, quyết định gia hạn, gia hạn trực tiếp, sửa, xóa (khi chưa hoàn thành). Không bớt được người do Hiệu trưởng thêm vào.
+- **Duyệt 2 cấp**: leader duyệt → trạng thái **Chờ Hiệu trưởng duyệt** → Hiệu trưởng duyệt cuối mới thành **Đã hoàn thành**. Hiệu trưởng cũng có thể duyệt thẳng hoặc yêu cầu bổ sung ở bất kỳ bước nào. Nhiệm vụ do Hiệu trưởng tạo vẫn duyệt 1 cấp như cũ.
+- Không được: xóa nhiệm vụ của người khác, xóa nhiệm vụ đã hoàn thành (chỉ Hiệu trưởng), xóa văn bản trong kho, quản lý thẻ phân loại/cơ quan ban hành, vào mục Nhân sự và Thống kê.
+- Thông báo (tiếp nhận, tiến độ, nộp, xin gia hạn, tin nhắn) của nhiệm vụ do leader tạo được gửi cho leader đó; Hiệu trưởng nhận thông báo khi có kết quả chờ duyệt cuối.
+- Đề xuất AI dùng chung: ai giao việc trước thì nhiệm vụ đứng tên người đó; “Bỏ qua” xóa đề xuất với tất cả mọi người.
+
+### 15.4 Danh sách nhiệm vụ
+- Mọi danh sách nhiệm vụ hiện: tên (mã, trạng thái), người tạo, người thực hiện, cơ sở, mức ưu tiên, hạn. Chi tiết nhiệm vụ ghi **Người tạo**.
+- Bộ lọc có thêm **mức ưu tiên** cho mọi cấp; Hiệu trưởng lọc thêm được theo **người tạo**.

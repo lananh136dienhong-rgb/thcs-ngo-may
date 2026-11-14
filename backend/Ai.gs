@@ -219,8 +219,8 @@ function aiRunDoc_(docId, force) {
 }
 function apiAiProcess_(u, r) {
   const d = doc_(r.docId);
-  if (!isAdmin_(u) && d.uploaded_by !== u.user_id) throw new AppError('Bạn không có quyền chạy AI cho văn bản này', 'FORBIDDEN');
-  return aiRunDoc_(d.doc_id, isAdmin_(u) && !!r.retry);
+  if (!isMgr_(u) && d.uploaded_by !== u.user_id) throw new AppError('Bạn không có quyền chạy AI cho văn bản này', 'FORBIDDEN');
+  return aiRunDoc_(d.doc_id, isMgr_(u) && !!r.retry);
 }
 // Bộ hẹn giờ (xem installAiTrigger trong Setup.gs): xử lý các văn bản còn xếp hàng.
 function aiSweep() {
@@ -232,8 +232,9 @@ function aiSweep() {
 }
 
 // ===================== NHIỆM VỤ ĐỀ XUẤT =====================
+// Đề xuất AI dùng chung cho Hiệu trưởng và leader: ai duyệt trước thì nhiệm vụ đứng tên người đó; bỏ qua thì đề xuất biến mất với mọi người.
 function apiApproveSuggestion_(u, r) {
-  admin_(u);
+  mgr_(u);
   const s = Db.all('AiSuggestions').find(function (x) { return x.sug_id === String(r.id); });
   if (!s || s.status !== 'pending') throw new AppError('Đề xuất này không còn chờ duyệt', 'NOTFOUND');
   const doc = Db.all('Documents').find(function (d) { return d.doc_id === s.doc_id && !yes_(d.is_deleted); });
@@ -242,21 +243,21 @@ function apiApproveSuggestion_(u, r) {
   return made;
 }
 function apiSkipSuggestion_(u, r) {
-  admin_(u);
+  mgr_(u);
   const s = Db.all('AiSuggestions').find(function (x) { return x.sug_id === String(r.id); });
   if (!s || s.status !== 'pending') throw new AppError('Đề xuất này không còn chờ duyệt', 'NOTFOUND');
   Db.removeWhere('AiSuggestions', function (x) { return x.sug_id === s.sug_id; });   // bỏ qua = xóa luôn khỏi Google Sheets cho nhẹ
   return true;
 }
 function suggestionsView_(u) {
-  if (!isAdmin_(u)) return [];
+  if (!isMgr_(u)) return [];
   return Db.all('AiSuggestions').filter(function (s) { return s.status === 'pending'; })
     .map(function (s) { return { id: s.sug_id, doc: s.doc_id, title: s.title, desc: s.description, due: s.due_date || '', src: s.source_text, how: s.how }; });
 }
-// Thông tin AI gửi cho giao diện: Hiệu trưởng xem đầy đủ, người tải lên chỉ thấy trạng thái.
-function aiDocView_(d, admin) {
+// Thông tin AI gửi cho giao diện: Hiệu trưởng và leader (mgr) xem đầy đủ, nhân viên tải lên chỉ thấy trạng thái.
+function aiDocView_(d, mgr) {
   const st = d.ai_status || '';
-  if (!admin) return { st: st };
+  if (!mgr) return { st: st };
   const a = aiResult_(d), tags = aiTags_();
   return {
     st: st, err: d.ai_error || '',
