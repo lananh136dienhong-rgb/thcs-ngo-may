@@ -68,7 +68,7 @@ function mkBook() {
   sheets.push(mkSheet('Sheet1'));
   return b;
 }
-const SpreadsheetApp = { create: () => { const b = mkBook(); books.SHEET1 = b; return b; }, openById: id => books[id] };
+const SpreadsheetApp = { flushes: 0, flush() { this.flushes++; }, create: () => { const b = mkBook(); books.SHEET1 = b; return b; }, openById: id => books[id] };
 
 // ---- Google Drive giả lập ----
 const files = {}; let fid = 0;

@@ -37,7 +37,7 @@ function aiEnabled_() {
 function withLock_(fn) {
   const lock = LockService.getScriptLock();
   try { lock.waitLock(25000); } catch (x) { throw new AppError('Hệ thống đang bận, vui lòng thử lại sau vài giây', 'BUSY'); }
-  try { return fn(); } finally { lock.releaseLock(); }
+  try { return fn(); } finally { try { SpreadsheetApp.flush(); } finally { lock.releaseLock(); } }   // ghi hẳn xuống Sheet trước khi nhả khóa
 }
 
 // ===================== NGÀY THÁNG (tính bằng chương trình, không để AI tự tính) =====================

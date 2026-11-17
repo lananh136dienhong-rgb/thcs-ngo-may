@@ -470,3 +470,9 @@ AI đọc tệp thành phần mất thời gian, văn thư phải chờ mới t�
 1. Dán lại `Code.gs`, `Api.gs`, `HoSo.gs`, `Ai.gs` → Deploy → Manage deployments → bút chì → New version → Deploy. Không cần chạy `upgrade()` (không có sheet hay cột mới).
 2. Đưa `frontend/app.js`, `frontend/hoso.js`, `frontend/index.html` lên Cloudflare Pages (index.html nạp `?v=16`).
 3. Mở /exec để kiểm tra phiên bản `hs-2`.
+
+### 17.5 Bản hs-3 (sửa lỗi)
+- **Lỗi đã sửa:** bấm “Lưu” đúng lúc AI đang đọc một tệp thì khi AI ghi kết quả, tệp bị trả về trạng thái “đang tải dở” (hồ sơ còn 0 tệp). Nguyên nhân: thay đổi chưa được ghi hẳn xuống Sheet trước khi nhả khóa. Nay mọi thao tác ghi đều gọi `SpreadsheetApp.flush()` trước khi nhả khóa (Code.gs và Ai.gs).
+- Hiệu trưởng được xác nhận hồ sơ đã lưu như văn thư (khi văn thư vắng); Tổng quan của Hiệu trưởng liệt kê hồ sơ AI đã đọc xong đang chờ xác nhận.
+- Triển khai: dán lại `Code.gs`, `Ai.gs` → New version → Deploy; đưa `frontend/app.js` lên Cloudflare Pages. /exec báo phiên bản `hs-3`.
+- Hồ sơ đã bị lỗi trước bản này (hồ sơ “Chờ AI đọc” có 0 tệp, còn tệp hiện lại ở trang Tải công văn): Hiệu trưởng xóa hồ sơ đó rồi văn thư bấm “Lưu” lại; hoặc sửa ô `hs_id` của tệp trong sheet Documents thành mã hồ sơ rồi chạy `clearCache()`.

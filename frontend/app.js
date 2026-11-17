@@ -181,6 +181,7 @@ const hon=()=>{const g=PR.s?.g;return g=='Nữ'?'cô ':g=='Nam'?'thầy ':''};
 const sumLine=(n,parts)=>n?`Hôm nay có ${n} việc cần ${hon()||'bạn '}xử lý${parts.filter(Boolean).length?': '+parts.filter(Boolean).join(', '):''}.`:'Không có việc nào cần xử lý hôm nay.';
 function aOv(){const rev=T.filter(needRev),ex=T.filter(t=>t.ext),ov=T.filter(od),free=HS.filter(h=>!h.ld&&h.st=='Chờ xác nhận'),pend=D.filter(d=>!d.ok&&!d.hs).length;
  const items=[...bossItems(T),...free.map(h=>ovIt(dago(h.up)>=3?'l':'w',h.id+' · '+h.idest+' chưa có người phụ trách','Tải lên '+(dago(h.up)?dago(h.up)+' ngày trước':'hôm nay')+(h.lv?' · '+h.lv:''),'Chọn người phụ trách',hsAt(h)))];
+ HS.filter(h=>h.st==PEND).forEach(h=>{const p=hsProg(h.id);if(!p.busy&&p.n)items.push(ovIt(dago(h.up)>=1?'a':'w',h.id+' · '+h.idest+' · AI đã đọc xong, chờ xác nhận',(h.by?'Văn thư '+h.by+' đã lưu':'Đã lưu')+' · Hiệu trưởng cũng xác nhận được','Xác nhận',hsAt(h),dago(h.up)>=1))});
  if(pend)items.push(ovIt('w',pend+' văn bản chờ phân loại','Xem gợi ý của AI và xác nhận','Phân loại','data-a="go" data-p="up"',false));
  if(SUG.length)items.push(ovIt('w',SUG.length+' nhiệm vụ AI đề xuất','Xem lại và giao việc','Xem','data-a="go" data-p="ai"',false));
  const newest=HS.slice().sort((a,b)=>a.up<b.up?1:a.up>b.up?-1:a.id<b.id?1:-1).slice(0,5);

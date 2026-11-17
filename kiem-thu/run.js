@@ -629,6 +629,9 @@ console.log('\n== 23. Sổ công văn đến: hồ sơ → tệp thành phần')
   ok(bs(T.tt).notifs.some(n=>n.t.includes(H2)),'người được tiếp nhận nhận thông báo khi xác nhận');
   r=call('hsConfirm',T.vt,{hsId:H2,lv:'Chuyên môn'});ok(!r.ok,'không xác nhận lại lần hai');
   call('hsRemoveFile',T.vt,{docId:g3.id});
+  const k1=up('vt','7003.pdf').data;r=call('hsSave',T.vt,{idest:'7003/SYT',so:1152});ctx.aiSweep();
+  r=call('hsConfirm',T.admin,{hsId:r.data.id,lv:'Học sinh – Y tế'});ok(r.ok&&bs(T.anh).docs.some(d=>d.id==k1.id&&d.ok),'Hiệu trưởng cũng xác nhận được hồ sơ đã lưu (khi văn thư vắng)');
+  const fl0=ctx.SpreadsheetApp.flushes;call('hsUpdate',T.admin,{hsId:r.data.id,lv:'Chuyên môn'});ok(ctx.SpreadsheetApp.flushes>fl0,'ghi hẳn xuống Sheet trước khi nhả khóa (tránh AI ghi đè thao tác Lưu)');
   // phân quyền
   ok(call('setUserRole',T.admin,{id:'U020',role:'staff'}).ok&&call('setUserRole',T.admin,{id:'U020',role:'secretary'}).ok,'đổi phân quyền secretary qua lại');
   ok(call('rcvAdd',T.admin,{userId:'U002'}).ok===false,'U002 đã có trong danh sách');

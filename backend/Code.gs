@@ -54,7 +54,7 @@ class AppError extends Error {
 }
 
 // Số phiên bản backend: mở địa chỉ /exec trên trình duyệt để xem đang chạy bản nào (giúp biết đã Deploy đúng hay chưa).
-const APP_VERSION = 'hs-2';
+const APP_VERSION = 'hs-3';
 function doGet() { return out_({ ok: true, data: 'THCS Ngô Mây API đang chạy, phiên bản ' + APP_VERSION }); }
 
 function doPost(e) {
@@ -69,7 +69,8 @@ function doPost(e) {
     if (WRITE_ACTIONS.indexOf(req.action) >= 0) {
       const lock = LockService.getScriptLock();
       try { lock.waitLock(25000); } catch (x) { throw new AppError('Hệ thống đang bận, vui lòng thử lại sau vài giây', 'BUSY'); }
-      try { data = fn(user, req); } finally { lock.releaseLock(); }
+      // flush: ghi hẳn mọi thay đổi xuống Sheet TRƯỚC khi nhả khóa, để thao tác khác (VD: AI ghi kết quả) không đọc dữ liệu cũ rồi ghi đè
+      try { data = fn(user, req); } finally { try { SpreadsheetApp.flush(); } finally { lock.releaseLock(); } }
     } else {
       data = fn(user, req);
     }
