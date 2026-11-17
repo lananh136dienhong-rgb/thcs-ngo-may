@@ -476,3 +476,7 @@ AI đọc tệp thành phần mất thời gian, văn thư phải chờ mới t�
 - Hiệu trưởng được xác nhận hồ sơ đã lưu như văn thư (khi văn thư vắng); Tổng quan của Hiệu trưởng liệt kê hồ sơ AI đã đọc xong đang chờ xác nhận.
 - Triển khai: dán lại `Code.gs`, `Ai.gs` → New version → Deploy; đưa `frontend/app.js` lên Cloudflare Pages. /exec báo phiên bản `hs-3`.
 - Hồ sơ đã bị lỗi trước bản này (hồ sơ “Chờ AI đọc” có 0 tệp, còn tệp hiện lại ở trang Tải công văn): Hiệu trưởng xóa hồ sơ đó rồi văn thư bấm “Lưu” lại; hoặc sửa ô `hs_id` của tệp trong sheet Documents thành mã hồ sơ rồi chạy `clearCache()`.
+
+### 17.6 Trạng thái “Chờ tạo hồ sơ”
+- Hồ sơ đã lưu hiện **Chờ AI đọc** khi AI còn đang đọc, rồi tự đổi thành **Chờ tạo hồ sơ** khi AI đã đọc xong mọi tệp (văn thư hoặc Hiệu trưởng bấm “Xác nhận và tạo hồ sơ”).
+- Chỉ đổi giao diện (`frontend/hoso.js`, `frontend/app.js`, `frontend/index.html` nạp `?v=17`); máy chủ vẫn lưu trạng thái `Chờ AI đọc` cho cả hai, không cần cập nhật Apps Script.
