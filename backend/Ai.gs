@@ -23,6 +23,7 @@
 
 const AI = {
   MODEL: 'gemini-3.6-flash',
+  SWEEP_MS: 4 * 60 * 1000,   // thời gian tối đa một lượt aiSweep
   MAX_TRIES: 3,        // số lần thử tối đa cho mỗi văn bản
   MAX_TASKS: 8,        // số nhiệm vụ gợi ý tối đa cho mỗi văn bản
   BUFFER_DAYS: 2,      // hạn nội bộ sớm hơn hạn tuyệt đối trong văn bản bao nhiêu ngày
@@ -227,8 +228,10 @@ function aiSweep() {
   if (!aiEnabled_()) return;
   const ids = Db.all('Documents').filter(function (d) {
     return !yes_(d.is_deleted) && !yes_(d.reviewed) && (d.ai_status === 'queued' || (d.ai_status === 'reading' && minutesSince_(d.ai_at) > AI.STALE_MIN));
-  }).map(function (d) { return d.doc_id; }).slice(0, 3);
-  ids.forEach(function (id) { try { aiRunDoc_(id, false); } catch (e) { console.error(e); } });
+  }).map(function (d) { return d.doc_id; });
+  // Đọc lần lượt tới khi hết hàng đợi hoặc gần hết thời gian (Apps Script dừng sau 6 phút; hẹn giờ chạy mỗi 5 phút).
+  const t0 = Date.now();
+  for (let i = 0; i < ids.length && Date.now() - t0 < AI.SWEEP_MS; i++) { try { aiRunDoc_(ids[i], false); } catch (e) { console.error(e); } }
 }
 
 // ===================== NHIỆM VỤ ĐỀ XUẤT =====================

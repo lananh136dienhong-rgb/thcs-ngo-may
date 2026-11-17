@@ -21,7 +21,7 @@ const LISTS = {
   position: ['Hiệu trưởng', 'Phó hiệu trưởng', 'Tổ trưởng chuyên môn', 'Tổ phó chuyên môn', 'Giáo viên', 'Nhân viên'],   // chức vụ (chỉ hiển thị)
   gender: ['Nam', 'Nữ'],
   role: ['admin', 'leader', 'staff', 'secretary'],   // secretary = văn thư: quyền của staff + tiếp nhận hồ sơ công văn
-  hsStatus: ['Chờ xác nhận', 'Đang thực hiện', 'Đã giao việc']   // trạng thái hồ sơ công văn đến
+  hsStatus: ['Chờ AI đọc', 'Chờ xác nhận', 'Đang thực hiện', 'Đã giao việc']   // trạng thái hồ sơ công văn đến
 };
 
 // Các hành động có ghi dữ liệu: chạy trong khóa để hai người thao tác cùng lúc không làm hỏng dữ liệu.
@@ -29,7 +29,7 @@ const WRITE_ACTIONS = ['readNotifs', 'createTask', 'editTask', 'deleteTask', 'ac
   'requestExt', 'decideExt', 'extendTask', 'approveTask', 'requestMore', 'addAssignee', 'removeAssignee', 'sendMsg',
   'confirmDoc', 'deleteDoc', 'addTag', 'renameTag', 'deleteTag', 'updateProfile', 'addUser', 'updateUser', 'setUserActive', 'setUserRole', 'deleteUser', 'approveSuggestion', 'skipSuggestion', 'addAgency', 'renameAgency', 'deleteAgency',
   // Sổ công văn đến (HoSo.gs)
-  'hsCreate', 'hsEditFile', 'hsRemoveFile', 'hsUpdate', 'hsTake', 'hsSetLeader', 'hsAssign', 'hsDelete', 'lvAdd', 'lvDelete', 'rcvAdd', 'rcvRemove'];
+  'hsCreate', 'hsSave', 'hsConfirm', 'hsEditFile', 'hsRemoveFile', 'hsUpdate', 'hsTake', 'hsSetLeader', 'hsAssign', 'hsDelete', 'lvAdd', 'lvDelete', 'rcvAdd', 'rcvRemove'];
 
 // Cơ quan ban hành MẶC ĐỊNH (chỉ dùng để tạo dữ liệu ban đầu trong sheet Agencies; sau đó Hiệu trưởng tự thêm/sửa/xóa trên website).
 // Mã là tiền tố tên thư mục trong Drive; folder là tên thư mục sẽ tạo nếu chưa có.
@@ -54,7 +54,7 @@ class AppError extends Error {
 }
 
 // Số phiên bản backend: mở địa chỉ /exec trên trình duyệt để xem đang chạy bản nào (giúp biết đã Deploy đúng hay chưa).
-const APP_VERSION = 'hs-1';
+const APP_VERSION = 'hs-2';
 function doGet() { return out_({ ok: true, data: 'THCS Ngô Mây API đang chạy, phiên bản ' + APP_VERSION }); }
 
 function doPost(e) {

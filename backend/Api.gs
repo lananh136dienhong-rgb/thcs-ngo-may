@@ -16,7 +16,7 @@ function routes_() {
     addTag: apiAddTag_, renameTag: apiRenameTag_, deleteTag: apiDeleteTag_, updateProfile: apiUpdateProfile_,
     addUser: apiAddUser_, updateUser: apiUpdateUser_, setUserActive: apiSetUserActive_, setUserRole: apiSetUserRole_, deleteUser: apiDeleteUser_,
     // Sổ công văn đến (HoSo.gs)
-    hsUploadFile: apiHsUploadFile_, hsCreate: apiHsCreate_, hsEditFile: apiHsEditFile_, hsRemoveFile: apiHsRemoveFile_, hsUpdate: apiHsUpdate_,
+    hsUploadFile: apiHsUploadFile_, hsCreate: apiHsCreate_, hsSave: apiHsSave_, hsConfirm: apiHsConfirm_, hsEditFile: apiHsEditFile_, hsRemoveFile: apiHsRemoveFile_, hsUpdate: apiHsUpdate_,
     hsTake: apiHsTake_, hsSetLeader: apiHsSetLeader_, hsAssign: apiHsAssign_, hsDelete: apiHsDelete_,
     lvAdd: apiLvAdd_, lvDelete: apiLvDelete_, rcvAdd: apiRcvAdd_, rcvRemove: apiRcvRemove_
   };

@@ -447,3 +447,26 @@ Gán `secretary` ở mục Nhân sự (hoặc cột `app_role` trong sheet Users
 - Thẻ loại văn bản và cơ quan ban hành chuyển từ mục Tải văn bản sang mục Cài đặt.
 - Số đến do văn thư nhập theo Idest (chỉ gồm chữ số). Khi giao việc từ hồ sơ, các tệp của hồ sơ được đính kèm sẵn và có thể thêm văn bản khác trong Kho văn bản.
 - Menu đổi tên: “Giám sát tiến độ” thành “Giám sát nhiệm vụ”; bỏ ô tìm kiếm ở thanh trên cùng.
+
+## 17. Bản hs-2: nút “Lưu” và trạng thái “Chờ AI đọc”
+
+### 17.1 Vì sao
+AI đọc tệp thành phần mất thời gian, văn thư phải chờ mới tạo được hồ sơ. Bản này cho phép lưu hồ sơ lại để tải công văn khác trong lúc AI đọc.
+
+### 17.2 Cách dùng
+- Ở **Tải công văn**, sau khi nhập số Idest, số đến và tải tệp lên, văn thư bấm **Lưu** (không cần chờ AI, chưa cần chọn lĩnh vực).
+  Hồ sơ được cấp mã ngay, số Idest được giữ chỗ (không ai tạo trùng được), trang trống để tải công văn tiếp theo.
+- Hồ sơ đã lưu có trạng thái **Chờ AI đọc**; Danh sách công văn hiện tiến độ “AI đã đọc x/y tệp”, rồi “Chờ văn thư xác nhận” khi AI đọc xong.
+- Khi AI đọc xong, mở hồ sơ, kiểm tra/sửa từng tệp, chọn lĩnh vực rồi bấm **Xác nhận và tạo hồ sơ**: tệp vào Kho văn bản, hồ sơ chuyển **Chờ xác nhận** và người được tiếp nhận nhận thông báo.
+- Tổng quan của văn thư liệt kê hồ sơ đang chờ AI và hồ sơ đã đọc xong cần xác nhận.
+- Nút “Xác nhận và tạo hồ sơ” ở trang Tải công văn vẫn dùng được như trước khi AI đã đọc xong.
+
+### 17.3 Quy tắc
+- Hồ sơ Chờ AI đọc chỉ văn thư và Hiệu trưởng thấy; quản lý chưa thấy, chưa nhận phụ trách và Hiệu trưởng chưa chọn người phụ trách được.
+- Sửa tệp trong hồ sơ Chờ AI đọc không đưa lẻ tệp vào kho; tất cả tệp vào kho cùng lúc khi xác nhận.
+- Bộ hẹn giờ AI (`installAiTrigger`) nay đọc liên tục tới khoảng 4 phút mỗi lượt (trước đây 3 tệp mỗi lượt), nên hồ sơ đã lưu vẫn được đọc tiếp khi văn thư đóng trang.
+
+### 17.4 Triển khai
+1. Dán lại `Code.gs`, `Api.gs`, `HoSo.gs`, `Ai.gs` → Deploy → Manage deployments → bút chì → New version → Deploy. Không cần chạy `upgrade()` (không có sheet hay cột mới).
+2. Đưa `frontend/app.js`, `frontend/hoso.js`, `frontend/index.html` lên Cloudflare Pages (index.html nạp `?v=16`).
+3. Mở /exec để kiểm tra phiên bản `hs-2`.

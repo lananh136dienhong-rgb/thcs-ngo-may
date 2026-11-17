@@ -9,16 +9,19 @@
  *   hsUploadFile  → văn thư/Hiệu trưởng tải từng tệp; tệp ở thư mục tạm, hs_id = 'NHAP' (đang tiếp nhận); AI đọc từng tệp riêng (aiProcess)
  *   hsEditFile    → sửa tay kết quả AI (vai trò, số/ký hiệu, ngày, cơ quan, loại, tóm tắt)
  *   hsCreate      → "Xác nhận và tạo hồ sơ": kiểm tra số Idest không trùng, cấp mã hồ sơ, chuyển mọi tệp vào thư mục kho
+ *   hsSave        → "Lưu": cấp mã hồ sơ, giữ chỗ số Idest, trạng thái Chờ AI đọc; AI đọc tiếp ở phía sau, văn thư tải hồ sơ khác
+ *   hsConfirm     → văn thư kiểm tra hồ sơ đã lưu rồi xác nhận: tệp vào kho, hồ sơ chuyển Chờ xác nhận
  *   hsTake        → leader được tiếp nhận hồ sơ (danh sách trong mục Cài đặt) nhận phụ trách; mỗi hồ sơ chỉ một leader
  *   hsSetLeader   → Hiệu trưởng đổi người phụ trách (khi leader nhận nhầm)
  *   hsAssign      → leader phụ trách giao nhiệm vụ (dùng chung apiCreateTask_), tệp của hồ sơ được đính kèm từ kho
  *   hsDelete      → chỉ Hiệu trưởng: xóa hồ sơ và các tệp thành phần khỏi kho; nhiệm vụ đã giao được giữ nguyên
- * Trạng thái hồ sơ: Chờ xác nhận (chưa có leader) → Đang thực hiện (leader đã nhận) → Đã giao việc (đã có nhiệm vụ).
+ * Trạng thái hồ sơ: Chờ AI đọc (đã lưu, chưa xác nhận; chỉ văn thư và Hiệu trưởng thấy) → Chờ xác nhận (chưa có leader) → Đang thực hiện (leader đã nhận) → Đã giao việc (đã có nhiệm vụ).
  */
 
 const HS_DRAFT = 'NHAP';
 const DEFAULT_LV = ['Tổ chức cán bộ', 'Chuyên môn', 'Học sinh – Y tế', 'Tài chính – CSVC', 'Hành chính – Pháp chế', 'Đảng – Đoàn thể'];
 const HS_ROLES = ['main', 'att'];
+const HS_PEND = 'Chờ AI đọc';   // hồ sơ đã lưu, chờ AI đọc xong và văn thư xác nhận
 
 // ---------- quyền ----------
 function receivers_() { return Db.all('HsReceivers').map(function (r) { return r.user_id; }); }
@@ -109,7 +112,8 @@ function apiHsEditFile_(u, r) {
   if (k && !tagOk_(k)) throw new AppError('Loại văn bản không hợp lệ', 'BAD');
   const siblings = (draft ? draftDocs_(userById_(d.uploaded_by) || u) : hsDocs_(d.hs_id)).filter(function (x) { return x.doc_id !== d.doc_id; });
   if (role === 'att' && d.hs_role === 'main' && !draft) throw new AppError('Hồ sơ cần một văn bản chính. Hãy đặt tệp khác làm văn bản chính trước.', 'BAD');
-  const reviewed = yes_(d.reviewed), confirm = !!r.confirm && !reviewed && !draft;
+  const pend = !draft && hs_(d.hs_id).status === HS_PEND;   // hồ sơ đã lưu: tệp vào kho khi xác nhận cả hồ sơ
+  const reviewed = yes_(d.reviewed), confirm = !!r.confirm && !reviewed && !draft && !pend;
   if ((reviewed || confirm) && (!k || !ag)) throw new AppError('Tệp trong kho phải có loại văn bản và cơ quan ban hành', 'BAD');
   if (confirm && d.ai_status === 'reading' && minutesSince_(d.ai_at) <= AI.STALE_MIN) throw new AppError('AI đang đọc tệp này, vui lòng chờ vài giây rồi thử lại', 'BAD');
   // Đổi cơ quan/loại của tệp đã ở trong kho, hoặc đưa tệp mới vào kho: chuyển tệp sang đúng thư mục Drive.
@@ -150,18 +154,17 @@ function apiHsRemoveFile_(u, r) {
 }
 
 // ===================== TẠO HỒ SƠ =====================
-// r: idest, so (số đến), ty (trích yếu), lv (lĩnh vực), docIds (các tệp đang tiếp nhận của người tạo)
-function apiHsCreate_(u, r) {
-  clerk_(u);
-  Db.refresh('HoSo'); Db.refresh('Documents');
+// Kiểm tra chung khi lưu hoặc tạo hồ sơ: số Idest không trùng (trừ chính hồ sơ selfId), số đến là chữ số.
+function hsHead_(r, selfId) {
   const idest = str_(r.idest, 80, 'Số/ký hiệu Idest', true), key = idestKey_(idest);
-  const dup = Db.all('HoSo').find(function (h) { return !yes_(h.is_deleted) && idestKey_(h.idest) === key; });
+  const dup = Db.all('HoSo').find(function (h) { return !yes_(h.is_deleted) && h.hs_id !== selfId && idestKey_(h.idest) === key; });
   if (dup) throw new AppError('Số Idest ' + idest + ' đã có trong hồ sơ ' + dup.hs_id + '. Không được tạo hồ sơ trùng số Idest; nếu cấp trên gửi thêm tệp, hãy thêm tệp vào hồ sơ đó.', 'BAD');
   const soTxt = String(r.so == null ? '' : r.so).trim();
   if (!/^\d{1,7}$/.test(soTxt) || !(parseInt(soTxt, 10) > 0)) throw new AppError('Số đến không hợp lệ (chỉ gồm chữ số)', 'BAD');
-  const so = parseInt(soTxt, 10);
-  const lv = oneOf_(String(r.lv || ''), lvs_(), 'Lĩnh vực');
-  const ty = str_(r.ty, 500, 'Trích yếu');
+  return { idest: idest, so: parseInt(soTxt, 10), ty: str_(r.ty, 500, 'Trích yếu') };
+}
+// Các tệp đang tiếp nhận (nháp) của người tạo mà r.docIds chọn; cần đúng một văn bản chính.
+function hsPick_(u, r) {
   const mine = draftDocs_(u), want = Array.isArray(r.docIds) ? r.docIds.map(String) : mine.map(function (d) { return d.doc_id; });
   const docs = want.map(function (id) {
     const d = mine.find(function (x) { return x.doc_id === id; });
@@ -170,6 +173,10 @@ function apiHsCreate_(u, r) {
   });
   if (!docs.length) throw new AppError('Hãy tải lên ít nhất một tệp', 'BAD');
   if (docs.filter(function (d) { return d.hs_role === 'main'; }).length !== 1) throw new AppError('Hồ sơ cần đúng một văn bản chính', 'BAD');
+  return docs;
+}
+// Mỗi tệp phải xong AI (hoặc đã nhập tay) và có loại văn bản, cơ quan ban hành; trả về giá trị sẽ ghi vào kho.
+function hsVals_(docs) {
   const vals = {};
   docs.forEach(function (d) {
     if (d.ai_status === 'reading' && minutesSince_(d.ai_at) <= AI.STALE_MIN) throw new AppError('AI đang đọc tệp ' + d.name + ', vui lòng chờ vài giây rồi thử lại', 'BAD');
@@ -178,17 +185,65 @@ function apiHsCreate_(u, r) {
     if (!v.ag || !agencies_().some(function (a) { return a.code === v.ag; })) throw new AppError('Tệp ' + d.name + ' chưa có cơ quan ban hành. Hãy bấm “Sửa” để chọn.', 'BAD');
     vals[d.doc_id] = v;
   });
-  const id = Db.nextId('HoSo', 'hs_id', 'HS-' + today_().slice(0, 4) + '-', 4), at = now_();
+  return vals;
+}
+// Đưa các tệp vào kho (thư mục cơ quan/loại trong Drive) và gắn vào hồ sơ id.
+function hsFileAll_(docs, vals, id, at) {
   docs.forEach(function (d) {
     const v = vals[d.doc_id];
     try { fileDoc_(d, agency_(v.ag), v.k); }
     catch (e) { console.error(e); throw new AppError('Không chuyển được tệp vào thư mục Drive. Hãy kiểm tra quyền của thư mục văn bản.', 'SERVER'); }
     Db.update('Documents', d._row, { hs_id: id, tag: v.k, agency: v.ag, doc_no: v.num, summary: v.sum, doc_date: v.date, reviewed: true, reviewed_at: at, ai_result: compactAi_(d) });
   });
+}
+function hsNotifyNew_(u, id, lv, ty) {
+  receivers_().forEach(function (uid) { if (uid !== u.user_id) notify_(uid, 'Hồ sơ công văn mới ' + id + (lv ? ' (' + lv + ')' : '') + ': ' + ty, ''); });
+}
+// r: idest, so (số đến), ty (trích yếu), lv (lĩnh vực), docIds (các tệp đang tiếp nhận của người tạo)
+function apiHsCreate_(u, r) {
+  clerk_(u);
+  Db.refresh('HoSo'); Db.refresh('Documents');
+  const head = hsHead_(r, '');
+  const lv = oneOf_(String(r.lv || ''), lvs_(), 'Lĩnh vực');
+  const docs = hsPick_(u, r), vals = hsVals_(docs);
+  const id = Db.nextId('HoSo', 'hs_id', 'HS-' + today_().slice(0, 4) + '-', 4), at = now_();
+  hsFileAll_(docs, vals, id, at);
   const main = docs.find(function (d) { return d.hs_role === 'main'; });
-  Db.append('HoSo', { hs_id: id, so_den: so, idest: idest, trich_yeu: ty || vals[main.doc_id].sum || '(chưa có trích yếu)', linh_vuc: lv, status: 'Chờ xác nhận', leader_id: '', created_by: u.user_id, created_at: at, updated_at: at, is_deleted: false });
-  receivers_().forEach(function (uid) { if (uid !== u.user_id) notify_(uid, 'Hồ sơ công văn mới ' + id + ' (' + lv + '): ' + (ty || idest), ''); });
+  const ty = head.ty || vals[main.doc_id].sum || '(chưa có trích yếu)';
+  Db.append('HoSo', { hs_id: id, so_den: head.so, idest: head.idest, trich_yeu: ty, linh_vuc: lv, status: 'Chờ xác nhận', leader_id: '', created_by: u.user_id, created_at: at, updated_at: at, is_deleted: false });
+  hsNotifyNew_(u, id, lv, r.ty ? ty : head.idest);
   return { id: id, docs: docs.map(function (d) { return d.doc_id; }) };
+}
+// "Lưu": cấp mã hồ sơ và giữ chỗ số Idest ngay, chưa cần AI đọc xong. Tệp chưa vào kho; người được tiếp nhận chưa thấy hồ sơ.
+function apiHsSave_(u, r) {
+  clerk_(u);
+  Db.refresh('HoSo'); Db.refresh('Documents');
+  const head = hsHead_(r, '');
+  const lv = r.lv ? oneOf_(String(r.lv), lvs_(), 'Lĩnh vực') : '';
+  const docs = hsPick_(u, r);
+  const id = Db.nextId('HoSo', 'hs_id', 'HS-' + today_().slice(0, 4) + '-', 4), at = now_();
+  docs.forEach(function (d) { Db.update('Documents', d._row, { hs_id: id }); });
+  Db.append('HoSo', { hs_id: id, so_den: head.so, idest: head.idest, trich_yeu: head.ty, linh_vuc: lv, status: HS_PEND, leader_id: '', created_by: u.user_id, created_at: at, updated_at: at, is_deleted: false });
+  return { id: id, docs: docs.map(function (d) { return d.doc_id; }) };
+}
+// Xác nhận hồ sơ đã lưu: mọi tệp phải đủ thông tin; tệp vào kho, hồ sơ chuyển Chờ xác nhận và báo người được tiếp nhận.
+function apiHsConfirm_(u, r) {
+  clerk_(u);
+  Db.refresh('HoSo'); Db.refresh('Documents');
+  const h = hs_(r.hsId);
+  if (h.status !== HS_PEND) throw new AppError('Hồ sơ ' + h.hs_id + ' đã được xác nhận', 'BAD');
+  const lv = oneOf_(String(r.lv !== undefined ? r.lv : h.linh_vuc || ''), lvs_(), 'Lĩnh vực');
+  const ty0 = r.ty !== undefined ? str_(r.ty, 500, 'Trích yếu') : String(h.trich_yeu || '');
+  const docs = hsDocs_(h.hs_id);
+  if (!docs.length) throw new AppError('Hồ sơ chưa có tệp', 'BAD');
+  if (docs.filter(function (d) { return d.hs_role === 'main'; }).length !== 1) throw new AppError('Hồ sơ cần đúng một văn bản chính', 'BAD');
+  const todo = docs.filter(function (d) { return !yes_(d.reviewed); }), vals = hsVals_(todo), at = now_();
+  hsFileAll_(todo, vals, h.hs_id, at);
+  const main = docs.find(function (d) { return d.hs_role === 'main'; });
+  const ty = ty0 || (vals[main.doc_id] || fileVals_(main)).sum || '(chưa có trích yếu)';
+  setHs_(h, { status: 'Chờ xác nhận', linh_vuc: lv, trich_yeu: ty });
+  hsNotifyNew_(u, h.hs_id, lv, ty0 ? ty : h.idest);
+  return { id: h.hs_id, docs: docs.map(function (d) { return d.doc_id; }) };
 }
 
 // ===================== SỬA THÔNG TIN HỒ SƠ =====================
@@ -197,7 +252,7 @@ function apiHsUpdate_(u, r) {
   clerk_(u);
   const h = hs_(r.hsId), patch = {};
   if (r.lv !== undefined) {
-    if (!isAdmin_(u) && h.status !== 'Chờ xác nhận') throw new AppError('Hồ sơ đã có người phụ trách, chỉ Hiệu trưởng được đổi lĩnh vực', 'FORBIDDEN');
+    if (!isAdmin_(u) && h.status !== 'Chờ xác nhận' && h.status !== HS_PEND) throw new AppError('Hồ sơ đã có người phụ trách, chỉ Hiệu trưởng được đổi lĩnh vực', 'FORBIDDEN');
     patch.linh_vuc = oneOf_(String(r.lv), lvs_(), 'Lĩnh vực');
   }
   if (r.ty !== undefined) patch.trich_yeu = str_(r.ty, 500, 'Trích yếu', true);
@@ -211,6 +266,7 @@ function apiHsTake_(u, r) {
   if (!isRcv_(u)) throw new AppError('Bạn chưa được Hiệu trưởng cấp quyền tiếp nhận hồ sơ công văn', 'FORBIDDEN');
   Db.refresh('HoSo');
   const h = hs_(r.hsId);
+  if (h.status === HS_PEND) throw new AppError('Hồ sơ đang chờ văn thư xác nhận, chưa nhận phụ trách được', 'BAD');
   if (h.leader_id) {
     const x = userById_(h.leader_id);
     throw new AppError('Hồ sơ đã do ' + (x ? x.full_name : h.leader_id) + ' phụ trách. Mỗi hồ sơ chỉ một người phụ trách.', 'BAD');
@@ -223,6 +279,7 @@ function apiHsTake_(u, r) {
 function apiHsSetLeader_(u, r) {
   admin_(u);
   const h = hs_(r.hsId), uid = String(r.userId || '');
+  if (h.status === HS_PEND) throw new AppError('Hồ sơ đang chờ văn thư xác nhận, chưa chọn người phụ trách được', 'BAD');
   if (uid === (h.leader_id || '')) return true;
   if (uid) {
     const x = userById_(uid);
@@ -301,7 +358,8 @@ function apiRcvRemove_(u, r) {
 function hsView_(u) {
   if (!hsSee_(u)) return [];
   const name = userNames_(), T = group_(Db.all('Tasks').filter(function (t) { return t.hs_id && !yes_(t.is_deleted); }), 'hs_id');
-  return Db.all('HoSo').filter(function (h) { return !yes_(h.is_deleted); }).map(function (h) {
+  const clerk = isAdmin_(u) || isSec_(u);   // hồ sơ Chờ AI đọc: chỉ văn thư và Hiệu trưởng thấy
+  return Db.all('HoSo').filter(function (h) { return !yes_(h.is_deleted) && (clerk || h.status !== HS_PEND); }).map(function (h) {
     return { id: h.hs_id, so: Number(h.so_den) || h.so_den, up: String(h.created_at).slice(0, 10), idest: String(h.idest), ty: h.trich_yeu, lv: h.linh_vuc || '', st: h.status,
       ld: h.leader_id || '', ldn: h.leader_id ? (name[h.leader_id] || h.leader_id) : '', by: name[h.created_by] || '', nv: (T[h.hs_id] || []).map(function (t) { return t.task_id; }) };
   }).sort(function (a, b) { return (b.so - a.so) || (a.id < b.id ? 1 : -1); });

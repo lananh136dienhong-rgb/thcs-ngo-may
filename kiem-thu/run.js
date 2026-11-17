@@ -601,6 +601,34 @@ console.log('\n== 23. Sổ công văn đến: hồ sơ → tệp thành phần')
   // tạo lại cùng số Idest sau khi xóa, mã hồ sơ không cấp lại
   const f5=up('vt','5918-lai.pdf').data;call('aiProcess',T.vt,{docId:f5.id});
   r=call('hsCreate',T.vt,{idest:'5918/SGDĐT-TCCB',so:1144,lv:'Chuyên môn'});ok(r.ok&&r.data.id!=H1,'tạo lại được số Idest đã xóa, mã hồ sơ mới '+(r.data&&r.data.id));
+  // Lưu: hồ sơ Chờ AI đọc, văn thư tải hồ sơ khác trong lúc chờ
+  call('rcvAdd',T.admin,{userId:'U003'});
+  gemini.reply=()=>{throw new Error('chưa gọi')};
+  const g1=up('vt','7001-chinh.pdf').data,g2=up('vt','7001-pl.pdf').data;
+  r=call('hsSave',T.vt,{idest:'7001/SGDĐT',so:'',lv:''});ok(!r.ok&&/Số đến/.test(r.error),'Lưu vẫn cần số đến');
+  r=call('hsSave',T.vt,{idest:'5918/SGDĐT-TCCB',so:1150});ok(!r.ok&&/đã có trong hồ sơ/.test(r.error),'Lưu vẫn chặn trùng số Idest');
+  r=call('hsSave',T.vt,{idest:'7001/SGDĐT',so:1150,ty:'',lv:''});ok(r.ok&&r.data.docs.length==2,'Lưu khi AI chưa đọc xong, chưa chọn lĩnh vực: '+(r.data&&r.data.id||r.error));
+  const H2=r.data.id;
+  ok(bs(T.vt).hs.find(x=>x.id==H2).st=='Chờ AI đọc'&&!bs(T.vt).docs.some(d=>d.hs=='NHAP'),'hồ sơ Chờ AI đọc, khu tiếp nhận trống để tải hồ sơ khác');
+  ok(!bs(T.tt).hs.some(x=>x.id==H2)&&bs(T.admin).hs.some(x=>x.id==H2),'người được tiếp nhận chưa thấy, Hiệu trưởng thấy');
+  ok(!bs(T.anh).docs.some(d=>d.hs==H2),'tệp chưa vào kho');
+  r=call('hsSave',T.vt,{idest:'7001 / sgdđt',so:1151});ok(!r.ok,'số Idest đã được giữ chỗ ngay khi Lưu');
+  r=call('hsTake',T.tt,{hsId:H2});ok(!r.ok,'chưa nhận phụ trách được hồ sơ Chờ AI đọc');
+  r=call('hsSetLeader',T.admin,{hsId:H2,userId:'U003'});ok(!r.ok,'chưa chọn người phụ trách cho hồ sơ Chờ AI đọc');
+  const g3=up('vt','7002.pdf').data;ok(g3&&bs(T.vt).docs.find(d=>d.id==g3.id).hs=='NHAP','tải tiếp công văn khác trong lúc chờ');
+  r=call('hsConfirm',T.vt,{hsId:H2,lv:'Chuyên môn'});ok(!r.ok&&/loại văn bản|cơ quan/.test(r.error),'chưa xác nhận được khi AI chưa đọc xong');
+  gemini.reply=()=>resp({...GOOD,nhiem_vu:[]});
+  ctx.aiSweep();
+  ok(bs(T.vt).docs.filter(d=>d.hs==H2).every(d=>d.ai.st=='ready'&&!d.ok),'bộ hẹn giờ AI đọc xong tệp của hồ sơ đã lưu (văn thư đã đóng trang), tệp vẫn chưa vào kho');
+  r=call('hsEditFile',T.vt,{docId:g2.id,role:'att',num:'',date:'',ag:'03',k:'Khác',sum:'PL',confirm:true});ok(r.ok&&!bs(T.anh).docs.some(d=>d.id==g2.id),'sửa tệp trong hồ sơ Chờ AI đọc không đưa lẻ vào kho');
+  r=call('hsConfirm',T.vt,{hsId:H2});ok(!r.ok,'xác nhận cần lĩnh vực');
+  r=call('hsConfirm',T.anh,{hsId:H2,lv:'Chuyên môn'});ok(!r.ok&&r.code=='FORBIDDEN','staff không xác nhận được');
+  r=call('hsConfirm',T.vt,{hsId:H2,lv:'Chuyên môn'});ok(r.ok,'văn thư xác nhận hồ sơ đã lưu');
+  h=bs(T.tt).hs.find(x=>x.id==H2);ok(h&&h.st=='Chờ xác nhận'&&h.lv=='Chuyên môn'&&h.ty.length>0,'hồ sơ chuyển Chờ xác nhận, người được tiếp nhận thấy, trích yếu lấy từ văn bản chính');
+  ok(bs(T.anh).docs.filter(d=>d.hs==H2&&d.ok).length==2,'2 tệp đã vào Kho văn bản');
+  ok(bs(T.tt).notifs.some(n=>n.t.includes(H2)),'người được tiếp nhận nhận thông báo khi xác nhận');
+  r=call('hsConfirm',T.vt,{hsId:H2,lv:'Chuyên môn'});ok(!r.ok,'không xác nhận lại lần hai');
+  call('hsRemoveFile',T.vt,{docId:g3.id});
   // phân quyền
   ok(call('setUserRole',T.admin,{id:'U020',role:'staff'}).ok&&call('setUserRole',T.admin,{id:'U020',role:'secretary'}).ok,'đổi phân quyền secretary qua lại');
   ok(call('rcvAdd',T.admin,{userId:'U002'}).ok===false,'U002 đã có trong danh sách');
