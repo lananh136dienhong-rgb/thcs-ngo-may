@@ -131,7 +131,7 @@ class FakeDate extends RealDate {
 }
 const ctx = { console, CacheService, PropertiesService, Utilities, SpreadsheetApp, DriveApp, LockService, ContentService, UrlFetchApp, ScriptApp, Logger, Date: FakeDate, Buffer, Error, JSON, Math, String, Number, Array, Object, parseInt, isNaN, encodeURIComponent };
 vm.createContext(ctx);
-for (const f of ['Code.gs', 'Auth.gs', 'Db.gs', 'Api.gs', 'Docs.gs', 'Ai.gs', 'Setup.gs']) {
+for (const f of ['Code.gs', 'Auth.gs', 'Db.gs', 'Api.gs', 'Docs.gs', 'Ai.gs', 'HoSo.gs', 'Setup.gs']) {
   // const/class ở cấp cao nhất không lộ ra ngoài vm, đổi sang var để mã khác dùng được
   vm.runInContext(fs.readFileSync(DIR + f, 'utf8').replace(/^const (\w+) =/mg, 'var $1 =').replace(/^class (\w+)/mg, 'var $1 = class $1'), ctx, { filename: f });
 }

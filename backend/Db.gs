@@ -4,7 +4,7 @@
  */
 const SCHEMA = {
   Users: ['user_id', 'full_name', 'email', 'birth_year', 'address', 'position', 'app_role', 'department', 'campus', 'active', 'created_at', 'gender', 'phone', 'is_deleted'],
-  Tasks: ['task_id', 'title', 'description', 'priority', 'campus', 'department', 'target_type', 'due_date', 'status', 'created_by', 'created_at', 'updated_at', 'review_comment', 'ext_pending', 'is_deleted', 'src_doc'],
+  Tasks: ['task_id', 'title', 'description', 'priority', 'campus', 'department', 'target_type', 'due_date', 'status', 'created_by', 'created_at', 'updated_at', 'review_comment', 'ext_pending', 'is_deleted', 'src_doc', 'hs_id'],
   TaskAssignees: ['row_id', 'task_id', 'user_id', 'accepted_at', 'added_by', 'added_at'],
   TaskDocs: ['row_id', 'task_id', 'doc_id', 'added_by', 'added_at'],
   TaskFiles: ['file_id', 'task_id', 'kind', 'name', 'drive_file_id', 'uploaded_by', 'uploaded_at'],
@@ -14,12 +14,17 @@ const SCHEMA = {
   Messages: ['msg_id', 'task_id', 'sender_id', 'text', 'sent_at'],
   History: ['hist_id', 'task_id', 'actor_id', 'action', 'detail', 'at'],
   Documents: ['doc_id', 'name', 'drive_file_id', 'size_bytes', 'uploaded_by', 'uploaded_at', 'tag', 'reviewed', 'reviewed_at', 'is_deleted',
-    'agency', 'doc_no', 'summary', 'ai_status', 'ai_tries', 'ai_at', 'ai_error', 'ai_result'],
+    'agency', 'doc_no', 'summary', 'ai_status', 'ai_tries', 'ai_at', 'ai_error', 'ai_result',
+    'hs_id', 'hs_role', 'doc_date'],   // hs_id: mã hồ sơ công văn ('NHAP' = tệp đang tiếp nhận, chưa tạo hồ sơ); hs_role: main | att
   DocTags: ['tag_id', 'tag_name', 'active'],
   Notifications: ['notif_id', 'to_user_id', 'text', 'task_id', 'created_at', 'is_read'],
   Agencies: ['code', 'name', 'folder', 'active'],
   AiSuggestions: ['sug_id', 'doc_id', 'title', 'description', 'due_date', 'source_text', 'how', 'status', 'task_id', 'created_at'],
-  AiFeedback: ['fb_id', 'doc_name', 'ai_tag', 'ai_agency', 'final_tag', 'final_agency', 'at']
+  AiFeedback: ['fb_id', 'doc_name', 'ai_tag', 'ai_agency', 'final_tag', 'final_agency', 'at'],
+  // ---- Sổ công văn đến ----
+  HoSo: ['hs_id', 'so_den', 'idest', 'trich_yeu', 'linh_vuc', 'status', 'leader_id', 'created_by', 'created_at', 'updated_at', 'is_deleted'],
+  LinhVuc: ['lv_id', 'name', 'active'],
+  HsReceivers: ['user_id', 'added_by', 'added_at']   // leader được tiếp nhận hồ sơ (Hiệu trưởng chọn trong mục Cài đặt)
 };
 
 const Db = (function () {

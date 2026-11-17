@@ -29,12 +29,14 @@ thcs-ngo-may/
 │   ├─ Api.gs               nhiệm vụ: tạo, sửa, tiếp nhận, nộp, duyệt, gia hạn, thêm người, chat
 │   ├─ Docs.gs              văn bản, xác nhận phân loại, thẻ, hồ sơ cá nhân
 │   ├─ Ai.gs                ★ trợ lý AI Gemini: đọc văn bản, gợi ý phân loại và nhiệm vụ
+│   ├─ HoSo.gs              ★ Sổ công văn đến: hồ sơ công văn → tệp thành phần, người phụ trách, cài đặt
 │   └─ Setup.gs             setup(), upgrade(), aiSelfTest(), installAiTrigger(), checkUsers(), sao lưu
 ├─ frontend/                ← đưa lên Cloudflare Pages
 │   ├─ index.html           khung trang + màn hình đăng nhập
 │   ├─ config.js            ★ file DUY NHẤT cần sửa: địa chỉ API + Client ID
 │   ├─ api.js               hàm gọi backend
 │   ├─ app.js               toàn bộ giao diện và xử lý sự kiện
+│   ├─ hoso.js              ★ giao diện Sổ công văn đến, Tiếp nhận hồ sơ, Hồ sơ tôi phụ trách, Cài đặt (nạp sau app.js)
 │   ├─ style.css            giao diện
 │   └─ _headers             tiêu đề bảo mật cho Cloudflare
 ├─ kiem-thu/                bộ kiểm thử backend chạy bằng Node.js
@@ -413,3 +415,35 @@ Xem lỗi chi tiết: Apps Script → **Executions** (Nhật ký thực thi).
 ### 15.4 Danh sách nhiệm vụ
 - Mọi danh sách nhiệm vụ hiện: tên (mã, trạng thái), người tạo, người thực hiện, cơ sở, mức ưu tiên, hạn. Chi tiết nhiệm vụ ghi **Người tạo**.
 - Bộ lọc có thêm **mức ưu tiên** cho mọi cấp; Hiệu trưởng lọc thêm được theo **người tạo**.
+
+## 16. Bản hs-1: Danh sách công văn (hồ sơ công văn → tệp thành phần)
+
+### 16.1 Vì sao
+Trước đây mỗi dòng của sheet công văn chứa nhiều tệp, nên AI không trích xuất riêng từng tệp, và số Idest có lúc bị nhập trùng.
+Bản này tách thành **hồ sơ** (một lần nhận trên Idest, mã `HS-năm-số`) và **tệp thành phần** (mỗi tệp là một văn bản `VB-...` trong Kho văn bản, AI đọc riêng).
+
+### 16.2 Triển khai
+1. Dán lại các file `.gs` (thêm file mới **HoSo.gs**), rồi **Deploy → Manage deployments → bút chì → New version → Deploy**.
+2. Chạy hàm `upgrade()` một lần: tự thêm sheet `HoSo`, `LinhVuc`, `HsReceivers`, các cột mới `hs_id`, `hs_role`, `doc_date` (Documents) và `hs_id` (Tasks), cùng 6 lĩnh vực mặc định.
+3. Đưa `frontend/hoso.js` lên cùng các file cũ (index.html đã nạp `hoso.js?v=15`).
+4. Mở /exec để kiểm tra phiên bản `hs-1`.
+
+### 16.3 App role
+| app_role | Là ai | Quyền thêm |
+|---|---|---|
+| admin (giao diện: Lãnh đạo) | Hiệu trưởng | Tải công văn, Danh sách công văn, Cài đặt, đổi người phụ trách, xóa hồ sơ |
+| secretary (giao diện: Văn thư) | Văn thư | Toàn bộ quyền của staff, cộng Tải công văn, Danh sách công văn, thêm/sửa/xóa tệp thành phần |
+| leader (giao diện: Quản lý) | Tổ trưởng, Phó hiệu trưởng… | Nếu có tên trong Cài đặt → Người được tiếp nhận hồ sơ: thấy Danh sách công văn, Công văn tôi phụ trách, nhận phụ trách (mỗi hồ sơ một người), giao việc |
+| staff (giao diện: Nhân viên) | Giáo viên, nhân viên | Không đổi |
+Gán `secretary` ở mục Nhân sự (hoặc cột `app_role` trong sheet Users).
+
+### 16.4 Quy tắc
+- Không cho tạo hai hồ sơ cùng số Idest (bỏ qua khoảng trắng, hoa thường). Cấp trên gửi thêm tệp → mở hồ sơ cũ, bấm “+ Thêm tệp”.
+- Mỗi hồ sơ có đúng một văn bản chính; ngày văn bản và cơ quan của hồ sơ lấy từ văn bản chính.
+- Tệp vào Kho văn bản khi bấm “Xác nhận và tạo hồ sơ” (tệp thêm sau: khi bấm “Lưu và đưa vào kho”), được xếp vào thư mục cơ quan ban hành / loại văn bản như văn bản thường.
+- Trạng thái hồ sơ: Chờ xác nhận (chưa có leader) → Đang thực hiện (leader đã nhận) → Đã giao việc (đã có nhiệm vụ).
+- Xóa tệp hoặc xóa hồ sơ: tệp bị gỡ khỏi kho (Drive vào thùng rác 30 ngày); nhiệm vụ đã giao giữ nguyên.
+- Bỏ quyền tiếp nhận của một leader: hồ sơ người đó đang phụ trách giữ nguyên, Hiệu trưởng tự đổi nếu cần.
+- Thẻ loại văn bản và cơ quan ban hành chuyển từ mục Tải văn bản sang mục Cài đặt.
+- Số đến do văn thư nhập theo Idest (chỉ gồm chữ số). Khi giao việc từ hồ sơ, các tệp của hồ sơ được đính kèm sẵn và có thể thêm văn bản khác trong Kho văn bản.
+- Menu đổi tên: “Giám sát tiến độ” thành “Giám sát nhiệm vụ”; bỏ ô tìm kiếm ở thanh trên cùng.

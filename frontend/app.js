@@ -5,7 +5,7 @@
  *  - Các hàm vẽ giao diện (aOv, sOv, dtl, modal, draw...) đọc các biến này và dựng HTML.
  *  - Mọi thao tác ghi dữ liệu đi qua act(...) → API.call → backend kiểm tra quyền → tải lại dữ liệu → vẽ lại.
  */
-let ME='',TD='',TAGS=[],T=[],D=[],N=[],PPL=[],NS=[],SUG=[],AGS=[],TF={},AIOK=0,BV='';const FV='14';
+let ME='',TD='',TAGS=[],T=[],D=[],N=[],PPL=[],NS=[],SUG=[],AGS=[],TF={},AIOK=0,BV='';const FV='15';
 const PR={a:null,s:null,l:null};   // hồ sơ người đang đăng nhập (dùng chung cho 3 vai trò)
 const $=s=>document.querySelector(s),fd=i=>i.split('-').reverse().join('/'),ini=n=>n.split(' ').slice(-2).map(w=>w[0]).join('');
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -13,7 +13,7 @@ const TO=['Ban giám hiệu','Tổ GDTC – Nghệ thuật','Tổ KHTN – Công
 const ST=['Chưa tiếp nhận','Đang thực hiện','Chờ duyệt','Chờ Hiệu trưởng duyệt','Yêu cầu bổ sung','Đã hoàn thành'];
 const SC={'Chưa tiếp nhận':'g','Đang thực hiện':'b','Chờ duyệt':'a','Chờ Hiệu trưởng duyệt':'t','Yêu cầu bổ sung':'p','Đã hoàn thành':'ok'};
 const POS=['Hiệu trưởng','Phó hiệu trưởng','Tổ trưởng chuyên môn','Tổ phó chuyên môn','Giáo viên','Nhân viên'],CS=['Trường chính','Phân hiệu'],PRI=['Cao','Trung bình','Thấp'];
-const ROLE={admin:'Toàn quyền: quản lý nhân sự, mọi nhiệm vụ, duyệt cuối, xóa văn bản',leader:'Tạo và giám sát nhiệm vụ do mình tạo, duyệt cấp 1, tải và phân loại văn bản, nhận đề xuất AI',staff:'Thực hiện nhiệm vụ được giao, tải văn bản lên chờ phân loại'};
+const ROLE={admin:'Toàn quyền: quản lý nhân sự, mọi nhiệm vụ, duyệt cuối, xóa văn bản',leader:'Tạo và giám sát nhiệm vụ do mình tạo, duyệt cấp 1, tải và phân loại văn bản, nhận đề xuất AI',staff:'Thực hiện nhiệm vụ được giao, tải văn bản lên chờ phân loại',secretary:'Văn thư: quyền của staff, cộng tiếp nhận hồ sơ công văn (Sổ công văn đến), thêm/sửa/xóa tệp thành phần'};
 const F0=()=>({q:'',st:'',cs:'',to:'',who:'',pri:'',by:''});
 const S={role:'s',page:'ov',tid:null,m:null,tab:'Tất cả',f:F0(),nf:{q:'',r:'',t:'',c:'',on:'',role:''},nid:null,pick:[],dp:[],rf:{a:'',b:'',who:'',to:'',cs:'',st:''},err:'',ef:[],ea:[],kf:{q:'',k:'',ag:''},edit:null,sug:null,sel:{}};
 const rk=()=>S.role=='a'?'a':'s',nl=r=>N.filter(n=>n.r==r&&(r=='a'||!n.id||!!find(n.id)));
@@ -37,23 +37,14 @@ const prog=L=>`<h2>Tiến độ theo tổ</h2><div style="height:8px"></div>${TO
 const RG='grid-template-columns:minmax(220px,2.4fr) minmax(130px,1.1fr) minmax(150px,1.3fr) 110px 110px 100px 20px;min-width:960px';
 const rows=L=>`<div class="sc"><div class="tr h" style="${RG}"><span>NHIỆM VỤ</span><span>NGƯỜI TẠO</span><span>NGƯỜI THỰC HIỆN</span><span>CƠ SỞ</span><span>ƯU TIÊN</span><span>HẠN</span><span></span></div>${L.map(t=>`<div class="tr" style="${RG}" tabindex="0" data-a="open" data-id="${t.id}"><div><span class="id">${t.id}</span><div class="tt">${esc(t.title)}</div><div>${bds(t)}</div></div><div>${esc(t.by||'')}${t.byP?`<div class="sub">${esc(t.byP)}</div>`:''}</div><div>${t.as.map(a=>`<div style="display:flex;gap:6px;align-items:center;margin:2px 0"><span class="av" style="width:24px;height:24px;font-size:9px">${ini(a)}</span>${esc(a)}</div>`).join('')}</div><div>${esc(t.cs)}</div><div>${prb(t.pri)}</div><div class="${od(t)?'late':''}">${fd(t.due)}</div><span>›</span></div>`).join('')||'<p class="sub" style="padding:20px">Chưa có nhiệm vụ phù hợp bộ lọc. Hãy thử bỏ bớt điều kiện lọc.</p>'}</div>`;
 const nots=(r,k)=>nl(r).slice(0,k||99).map(n=>`<div class="nt ${n.n?'':'rd'}" data-a="${n.id?'open':''}" data-id="${n.id}" style="cursor:pointer"><div style="flex:1"><b>${esc(n.t)}</b><div class="sub">${n.id?n.id+' · ':''}${n.at}</div></div></div>`).join('')||'<p class="sub">Chưa có thông báo.</p>';
-function nav(){const a=isA(),it=a?[['ov','Tổng quan'],['cr','Tạo nhiệm vụ'],['ai','Đề xuất nhiệm vụ từ AI'],['mo','Giám sát tiến độ'],['up','Tải văn bản'],['dc','Kho văn bản'],['rp','Thống kê'],['ns','Nhân sự'],['nt','Thông báo']]
- :isL()?[['ov','Tổng quan'],['mo','Nhiệm vụ của tôi'],['cr','Tạo nhiệm vụ'],['ai','Đề xuất nhiệm vụ từ AI'],['gm','Giám sát tiến độ'],['up','Tải văn bản'],['dc','Kho văn bản'],['nt','Thông báo']]:[['ov','Tổng quan'],['mo','Nhiệm vụ'],['dc','Kho văn bản'],['nt','Thông báo']];
-const cur=S.page;const unread=nl(rk()).filter(n=>n.n).length;
-return it.map(([k,l])=>`<button class="nv ${cur==k?'on':''}" data-a="go" data-p="${k}">${l}${k=='nt'&&unread?'<span class="dot"></span>':''}${k=='mo'&&!a?`<em>${mine().length}</em>`:''}${k=='mo'&&a?`<em>${T.length}</em>`:''}${k=='gm'?`<em>${created().length}</em>`:''}${k=='ns'?`<em>${NS.length}</em>`:''}${k=='ai'&&SUG.length?`<em>${SUG.length}</em>`:''}${k=='up'&&D.some(d=>!d.ok)?`<em>${D.filter(d=>!d.ok).length}</em>`:''}</button>`).join('')}
+// Thứ tự: Tổng quan, Tạo nhiệm vụ, Đề xuất AI, Giám sát nhiệm vụ / Nhiệm vụ của tôi, Tải công văn, Danh sách công văn, Tải văn bản, Kho văn bản, Thống kê, Nhân sự, Cài đặt, Thông báo
+function nav(){const a=isA(),it=a?[['ov','Tổng quan'],['cr','Tạo nhiệm vụ'],['ai','Đề xuất nhiệm vụ từ AI'],['mo','Giám sát nhiệm vụ'],['tn','Tải công văn'],['so','Danh sách công văn'],['up','Tải văn bản'],['dc','Kho văn bản'],['rp','Thống kê'],['ns','Nhân sự'],['cfg','Cài đặt'],['nt','Thông báo']]
+ :isL()?[['ov','Tổng quan'],['cr','Tạo nhiệm vụ'],['ai','Đề xuất nhiệm vụ từ AI'],['gm','Giám sát nhiệm vụ'],['mo','Nhiệm vụ của tôi'],...(rcvMe()?[['so','Danh sách công văn'],['hm','Công văn tôi phụ trách']]:[]),['up','Tải văn bản'],['dc','Kho văn bản'],['nt','Thông báo']]
+ :isSec()?[['ov','Tổng quan'],['mo','Nhiệm vụ'],['tn','Tải công văn'],['so','Danh sách công văn'],['dc','Kho văn bản'],['nt','Thông báo']]:[['ov','Tổng quan'],['mo','Nhiệm vụ'],['dc','Kho văn bản'],['nt','Thông báo']];
+const cur=S.page;const unread=nl(rk()).filter(n=>n.n).length,pend=D.filter(d=>!d.ok&&!d.hs).length;
+return it.map(([k,l])=>`<button class="nv ${cur==k?'on':''}" data-a="go" data-p="${k}">${l}${k=='nt'&&unread?'<span class="dot"></span>':''}${k=='mo'&&!a?`<em>${mine().length}</em>`:''}${k=='mo'&&a?`<em>${T.length}</em>`:''}${k=='gm'?`<em>${created().length}</em>`:''}${k=='ns'?`<em>${NS.length}</em>`:''}${k=='ai'&&SUG.length?`<em>${SUG.length}</em>`:''}${k=='up'&&pend?`<em>${pend}</em>`:''}${k=='so'?`<em>${HS.length}</em>`:''}${k=='hm'?`<em>${HS.filter(h=>h.ld==myId()).length}</em>`:''}${k=='tn'&&hsDraft().length?`<em>${hsDraft().length}</em>`:''}</button>`).join('')}
 /* ---------- ADMIN ---------- */
-function aOv(){const c=s=>T.filter(t=>t.st==s).length,L=S.tab=='Tất cả'?T:flt(T,{st:S.tab}),docs=D.filter(d=>!d.ok).length,ex=T.filter(t=>t.ext).length;
-return `<div class="hd"><div><h1>Tổng quan điều hành</h1><div class="sub">Cập nhật theo thời gian thực từ Dashboard nhân viên</div></div><button class="btn p" data-a="go" data-p="cr">+ Tạo nhiệm vụ</button></div>
-<div class="g4">${stat('b',T.length,'Tổng nhiệm vụ','Toàn trường','go-mo')}${stat('g',c('Chưa tiếp nhận'),'Chưa tiếp nhận','Cần theo dõi','f-Chưa tiếp nhận')}${stat('a',T.filter(needRev).length,'Chờ phê duyệt','Gồm kết quả leader đã duyệt','f-Cần duyệt')}${stat('r',T.filter(od).length,'Quá hạn','Cần đôn đốc','f-Quá hạn')}</div>
-<div class="cols"><div class="card"><div class="hd" style="margin:0"><div><h2>Nhiệm vụ</h2><div class="sub">Cập nhật lúc 08:30, hôm nay</div></div><button class="btn" data-a="go" data-p="mo">Xem tất cả ›</button></div>
-<div class="tabs">${['Tất cả',...ST].map(x=>`<button class="${S.tab==x?'on':''}" data-a="tab" data-v="${x}">${x}</button>`).join('')}</div>${rows(L.slice(0,6))}</div>
-<div class="stk"><div class="card"><h2>Điểm cần chú ý</h2><div class="sub">Ưu tiên xử lý trong hôm nay</div>
-<div class="li" data-a="f-Cần duyệt"><i class="bd a">${T.filter(needRev).length}</i><div><b>${T.filter(needRev).length} kết quả chờ duyệt</b><div class="sub">Nhân viên đã nộp${c('Chờ Hiệu trưởng duyệt')?` · ${c('Chờ Hiệu trưởng duyệt')} kết quả leader đã duyệt, chờ bạn duyệt cuối`:''}</div></div></div>
-<div class="li" data-a="f-Quá hạn"><i class="bd r">${T.filter(od).length}</i><div><b>${T.filter(od).length} nhiệm vụ quá hạn</b><div class="sub">Cần nhắc nhở hoặc gia hạn</div></div></div>
-<div class="li" data-a="f-Yêu cầu gia hạn"><i class="bd t">${ex}</i><div><b>${ex} yêu cầu gia hạn</b><div class="sub">Đang chờ quyết định</div></div></div>
-<div class="li" data-a="go" data-p="up"><i class="bd p">${docs}</i><div><b>${docs} văn bản chờ phân loại</b><div class="sub">Xem gợi ý của AI và xác nhận</div></div></div>
-<div class="li" data-a="go" data-p="ai"><i class="bd b">${SUG.length}</i><div><b>${SUG.length} nhiệm vụ AI đề xuất</b><div class="sub">Chờ bạn xem lại và giao việc</div></div></div></div>
-<div class="card"><h2>Thông báo mới</h2><div class="sub">Đồng bộ theo thời gian thực</div>${nots('a',4)}</div><div class="card">${prog(T)}</div></div></div>`}
+/* aOv: xem phần TỔNG QUAN bên dưới */
 function paintPick(){const s=$('#sg'),c=$('#chips');if(!s)return;c.innerHTML=S.pick.map(n=>`<span class="chip">${esc(n)}<button type="button" data-a="unpick" data-v="${esc(n)}" aria-label="Bỏ ${esc(n)}">✕</button></span>`).join('');
 const q=($('#ps').value||'').toLowerCase(),f=$('#cf');const tof=f.to.value,cs=f.cs.value,k=f.kind.value;
 const r=PPL.filter(p=>!S.pick.includes(p.n)&&p.n.toLowerCase().includes(q)&&(!tof||p.t==tof)&&(!cs||p.c==cs)&&(!k||p.r==k));
@@ -82,8 +73,8 @@ function aCr(){const nid=nextId();return `<h1>Giao nhiệm vụ</h1><p class="su
 function monitor(L,h,sub){const f=S.f,R=flt(L,f),bys=[...new Set(L.map(t=>t.by).filter(Boolean))].sort();return `<div class="hd"><div><h1>${h}</h1><div class="sub">${sub}</div></div>${mgr()?'<button class="btn p" data-a="go" data-p="cr">+ Tạo nhiệm vụ</button>':''}</div>
 <div class="fl" data-f2><input data-k="q" placeholder="Tìm theo mã, tên, người tạo, người thực hiện" value="${esc(f.q)}" style="min-width:260px"><select data-k="st">${opt([...ST,'Cần duyệt','Quá hạn','Yêu cầu gia hạn'],f.st,'Mọi trạng thái')}</select><select data-k="pri">${opt(PRI,f.pri,'Mọi mức ưu tiên')}</select><select data-k="cs">${opt(CS,f.cs,'Mọi cơ sở')}</select><select data-k="to">${opt(TO,f.to,'Mọi tổ')}</select><select data-k="who">${opt(PPL.map(p=>p.n),f.who,'Mọi người thực hiện')}</select>${isA()?`<select data-k="by">${opt(bys,f.by,'Mọi người tạo')}</select>`:''}</div>
 <div class="sub" style="margin:0 0 8px">${R.length==L.length?L.length+' nhiệm vụ':R.length+' / '+L.length+' nhiệm vụ'}</div><div class="card">${rows(R)}</div>`}
-const aMo=()=>monitor(T,'Giám sát tiến độ','Toàn bộ nhiệm vụ trong trường. Theo dõi trạng thái và xử lý đề nghị từ nhân viên.');
-const lMo=()=>monitor(created(),'Giám sát tiến độ','Các nhiệm vụ do bạn tạo. Bạn duyệt kết quả, sau đó Hiệu trưởng duyệt cuối mới được tính là hoàn thành.');
+const aMo=()=>monitor(T,'Giám sát nhiệm vụ','Toàn bộ nhiệm vụ trong trường. Theo dõi trạng thái và xử lý đề nghị từ nhân viên.');
+const lMo=()=>monitor(created(),'Giám sát nhiệm vụ','Các nhiệm vụ do bạn tạo. Bạn duyệt kết quả, sau đó Hiệu trưởng duyệt cuối mới được tính là hoàn thành.');
 /* ---------- VĂN BẢN ---------- */
 const AGN=c=>AGS.find(a=>a.c==c)?.n||'';
 const nrm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/đ/g,'d').replace(/[-_.\/]+/g,' ');
@@ -104,16 +95,18 @@ function upRow(d){const a=d.ai||{},r=a.r,run=RUN.has(d.id)||a.st=='reading'||a.s
 <span style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn t" data-a="cfm" data-id="${d.id}" ${run?'disabled':''}>Lưu và đồng ý</button>${AIOK&&!run&&a.st!='ready'?`<button class="btn" data-a="runai" data-id="${d.id}">Chạy AI</button>`:''}${isA()?`<button class="btn" data-a="ddel" data-id="${d.id}" style="color:#d23b3b" aria-label="Xóa ${d.id}">Xóa</button>`:''}</span></div>
 <div class="upd"><div>${l1}</div>${r?.q?`<div class="sub"><i>“${esc(r.q)}”</i></div>`:''}<div id="sv-${d.id}">${svp(sel.k,sel.ag)}</div>${r?.nt?`<div class="sub">✦ AI tìm thấy ${r.nt} việc cần làm. Sau khi bạn đồng ý, các việc này xuất hiện ở mục “Đề xuất nhiệm vụ từ AI”.</div>`:''}${r&&!r.nt&&!r.mat?`<div class="sub">✦ AI không thấy việc nào nhà trường cần làm${r.tn?': '+esc(r.tn):' (văn bản chỉ để biết)'}. Bạn vẫn có thể tự giao việc ở mục Tạo nhiệm vụ.</div>`:''}${r?.mat?'<div style="color:#d23b3b">⚠ Văn bản Mật: AI không gợi ý nhiệm vụ. Không nên tải văn bản mật lên hệ thống.</div>':''}</div></div>`}
 const verBar=()=>BV?`<div class="sub" style="margin:-6px 0 10px">Giao diện v${FV} · Máy chủ ${esc(BV)}</div>`:`<div class="card" style="background:#fdecec;border-color:#d23b3b;margin-bottom:12px"><b style="color:#d23b3b">Máy chủ (Apps Script) đang chạy bản CŨ, chưa có tính năng AI.</b><div class="sub">Hãy dán lại các file .gs, rồi Deploy → Manage deployments → bút chì → New version → Deploy. Nếu bạn tạo “New deployment” thì địa chỉ /exec đổi, phải sửa API_URL trong config.js.</div></div>`;
-function aUp(){const P=D.filter(d=>!d.ok);
+function aUp(){const P=D.filter(d=>!d.ok&&!d.hs);
 return `<h1>Tải văn bản</h1>${verBar()}<p class="sub">Tải văn bản mới lên. AI (nếu bật) đọc và gợi ý phân loại; nếu không bạn tự chọn. <b>Văn bản chỉ vào Kho văn bản sau khi bạn chọn loại văn bản, cơ quan ban hành và bấm “Lưu và đồng ý”.</b></p>${upForm(1)}
-<div class="card sc" style="margin-bottom:14px"><h2>Chờ xác nhận phân loại (${P.length})</h2><div class="sub" style="margin-bottom:8px">Muốn sửa gợi ý của AI, đổi lựa chọn trong ô rồi bấm “Lưu và đồng ý”. Hệ thống ghi nhận các lần sửa để gợi ý chính xác hơn.</div><div class="tr h" style="grid-template-columns:${UPG};min-width:1000px"><span>MÃ VĂN BẢN</span><span>TÊN TỆP</span><span>NGÀY TẢI</span><span>LOẠI${AIOK?' (AI GỢI Ý)':''}</span><span>CƠ QUAN${AIOK?' (AI GỢI Ý)':''}</span><span>TIN CẬY</span><span>THAO TÁC</span></div>${P.map(upRow).join('')||'<p class="sub" style="padding:20px">Không có văn bản nào đang chờ phân loại.</p>'}</div>${isA()?tagCard():'<p class="sub">Thẻ phân loại và cơ quan ban hành do Hiệu trưởng quản lý. Chỉ Hiệu trưởng được xóa văn bản.</p>'}`}
-function khoList(adm){const L=kfl(D.filter(d=>d.ok)),gt=`110px minmax(180px,2fr) 90px 130px minmax(160px,1.4fr) ${adm?150:100}px`;   // adm: hiện nút Xóa (chỉ Hiệu trưởng)
- return `<div class="tr h" style="grid-template-columns:${gt};min-width:900px"><span>MÃ VĂN BẢN</span><span>TÊN TỆP</span><span>NGÀY TẢI</span><span>LOẠI VĂN BẢN</span><span>CƠ QUAN BAN HÀNH</span><span></span></div>`
- +(L.map(d=>`<div class="tr" style="grid-template-columns:${gt};min-width:900px;cursor:default"><b>${esc(d.id)}</b><span>${esc(d.n)}${d.no?`<div class="sub">Số ${esc(d.no)}</div>`:''}</span><span>${fd(d.d)}</span><span>${d.k?`<span class="bd b">${esc(d.k)}</span>`:'<span class="sub">—</span>'}</span><span>${d.ag?esc(AGN(d.ag)):'<span class="sub">—</span>'}</span><span><button class="btn" data-a="ddl" data-id="${d.id}">⬇ Tải</button>${adm?` <button class="btn" data-a="ddel" data-id="${d.id}" style="color:#d23b3b" aria-label="Xóa ${d.id}">Xóa</button>`:''}</span></div>`).join('')||'<p class="sub" style="padding:20px">Không có văn bản phù hợp. Hãy thử bỏ bớt điều kiện lọc.</p>')}
+<div class="card sc" style="margin-bottom:14px"><h2>Chờ xác nhận phân loại (${P.length})</h2><div class="sub" style="margin-bottom:8px">Muốn sửa gợi ý của AI, đổi lựa chọn trong ô rồi bấm “Lưu và đồng ý”. Hệ thống ghi nhận các lần sửa để gợi ý chính xác hơn.</div><div class="tr h" style="grid-template-columns:${UPG};min-width:1000px"><span>MÃ VĂN BẢN</span><span>TÊN TỆP</span><span>NGÀY TẢI</span><span>LOẠI${AIOK?' (AI GỢI Ý)':''}</span><span>CƠ QUAN${AIOK?' (AI GỢI Ý)':''}</span><span>TIN CẬY</span><span>THAO TÁC</span></div>${P.map(upRow).join('')||'<p class="sub" style="padding:20px">Không có văn bản nào đang chờ phân loại.</p>'}</div><p class="sub">${isA()?'Thẻ loại văn bản và cơ quan ban hành nay quản lý ở mục <button class="btn" data-a="go" data-p="cfg" style="padding:2px 8px;font-size:12px">Cài đặt</button>. Tệp của hồ sơ công văn được xác nhận ở mục Sổ công văn đến.':'Thẻ phân loại và cơ quan ban hành do Hiệu trưởng quản lý. Chỉ Hiệu trưởng được xóa văn bản.'}</p>`}
+function khoList(adm){const L=kfl(D.filter(d=>d.ok)),gt=`110px minmax(180px,2fr) 90px 130px minmax(150px,1.3fr) 120px ${adm?80:0}px`;   // adm: hiện nút Xóa (chỉ Hiệu trưởng)
+ // Bấm tên tệp để tải; cột NGUỒN: mã hồ sơ công văn (bấm để mở hồ sơ) hoặc "Tải lẻ"
+ const src=d=>d.hs&&d.hs!='NHAP'?(hsBy(d.hs)?`<button class="btn" data-a="hsopen" data-id="${esc(d.hs)}" style="padding:2px 8px;font-size:12px;color:var(--bt)">${esc(d.hs)}</button>`:`<span class="id" style="font-size:12px">${esc(d.hs)}</span>`)+`<div class="sub">${d.hr=='main'?'Văn bản chính':'Phụ lục'}</div>`:'<span class="sub">Tải lẻ</span>';
+ return `<div class="tr h" style="grid-template-columns:${gt};min-width:960px"><span>MÃ VĂN BẢN</span><span>TÊN TỆP</span><span>NGÀY TẢI</span><span>LOẠI VĂN BẢN</span><span>CƠ QUAN BAN HÀNH</span><span>NGUỒN</span><span></span></div>`
+ +(L.map(d=>`<div class="tr" style="grid-template-columns:${gt};min-width:960px;cursor:default;align-items:start"><b>${esc(d.id)}</b><span><span class="flink" data-a="dldoc" data-v="${esc(d.id)}" data-g="${esc(d.g||'')}" data-dk="d:${esc(d.id)}" title="Bấm để tải xuống">${esc(d.n)}</span>${d.no?`<div class="sub" style="margin-top:3px">Số ${esc(d.no)}</div>`:''}</span><span>${fd(d.d)}</span><span>${d.k?`<span class="bd b">${esc(d.k)}</span>`:'<span class="sub">—</span>'}</span><span>${d.ag?esc(AGN(d.ag)):'<span class="sub">—</span>'}</span><span>${src(d)}</span><span>${adm?`<button class="btn" data-a="ddel" data-id="${d.id}" style="color:#d23b3b;padding:6px 12px" aria-label="Xóa ${d.id}">Xóa</button>`:''}</span></div>`).join('')||'<p class="sub" style="padding:20px">Không có văn bản phù hợp. Hãy thử bỏ bớt điều kiện lọc.</p>')}
 const khoCount=()=>{const n=kfl(D.filter(d=>d.ok)).length,t=D.filter(d=>d.ok).length;return n==t?t+' văn bản':n+' / '+t+' văn bản'};
 function khoUpd(){const l=$('#kl'),c=$('#kc');if(l)l.innerHTML=khoList(isA());if(c)c.textContent=khoCount()}
 // mode: 'a' Hiệu trưởng (được xóa), 'l' leader (phân loại ở mục Tải văn bản, không xóa), 's' nhân viên (tải lên chờ phân loại)
-function kho(mode){const f=S.kf,adm=mode=='a',my=mode=='s'?D.filter(d=>!d.ok&&d.mine):[];
+function kho(mode){const f=S.kf,adm=mode=='a',my=mode=='s'?D.filter(d=>!d.ok&&d.mine&&!d.hs):[];
 return `<h1>Kho văn bản</h1><p class="sub">${mode!='s'?'Các văn bản đã được phân loại. Văn bản mới tải lên được xác nhận ở mục Tải văn bản.':'Tìm và tải các văn bản đã được phân loại. Bạn cũng có thể tải văn bản lên để Hiệu trưởng hoặc tổ trưởng phân loại.'}</p>${mode=='s'?upForm(0):''}
 ${my.length?`<div class="card" style="margin-bottom:14px"><h2>Văn bản bạn tải lên, chờ phân loại</h2>${my.map(d=>`<div class="li" style="cursor:default"><b>${d.id}</b><span style="flex:1">${esc(d.n)}</span><span class="bd a">Chờ phân loại</span></div>`).join('')}</div>`:''}
 <div class="fl" data-f4><input data-k="q" placeholder="Tìm theo mã văn bản, tên tệp, số ký hiệu" value="${esc(f.q)}" style="min-width:280px"><select data-k="k">${opt(TAGS,f.k,'Mọi loại văn bản')}</select><select data-k="ag"><option value="">Mọi cơ quan ban hành</option>${AGS.map(x=>`<option value="${x.c}" ${x.c==f.ag?'selected':''}>${esc(x.c+' · '+x.n)}</option>`).join('')}</select></div>
@@ -135,7 +128,9 @@ return `<div class="hd"><div><h1>Thống kê</h1><p class="sub" style="margin:0"
 <div class="cols" style="grid-template-columns:1fr 1fr"><div class="card">${prog(L)}</div><div class="card"><h2>Theo người thực hiện</h2><div style="height:8px"></div>${PPL.filter(p=>L.some(t=>t.as.includes(p.n))).map(p=>pc(p.n,[L.filter(t=>t.as.includes(p.n)&&t.st=='Đã hoàn thành').length,L.filter(t=>t.as.includes(p.n)).length])).join('')}</div></div>`}
 /* ---------- NHÂN SỰ (chỉ Hiệu trưởng) ---------- */
 const onb=x=>x.on?'<span class="bd ok">Hoạt động</span>':'<span class="bd g">Đã tạm dừng</span>';
-const rlb=r=>`<span class="bd ${r=='admin'?'r':r=='leader'?'b':'g'}">${esc(r)}</span>`;
+// Tên hiển thị của app role (backend vẫn dùng admin / leader / staff / secretary)
+const RLN={admin:'Lãnh đạo',leader:'Quản lý',secretary:'Văn thư',staff:'Nhân viên'},rln=r=>RLN[r]||r,RLO=['admin','leader','secretary','staff'];
+const rlb=r=>`<span class="bd ${r=='admin'?'r':r=='leader'?'b':r=='secretary'?'p':'g'}">${esc(rln(r))}</span>`;
 const nsl=()=>{const f=S.nf,q=nrm(f.q).trim();return NS.filter(x=>(!q||nrm(x.n+' '+x.em+' '+x.ph).includes(q))&&(!f.r||x.r==f.r)&&(!f.t||x.t==f.t)&&(!f.c||x.c==f.c)&&(!f.on||String(x.on)==f.on)&&(!f.role||x.role==f.role))
  .sort((a,b)=>(TO.indexOf(a.t)-TO.indexOf(b.t))||(POS.indexOf(a.r)-POS.indexOf(b.r))||a.n.localeCompare(b.n,'vi'))};
 const NG='grid-template-columns:minmax(220px,1.8fr) minmax(140px,1fr) minmax(160px,1.2fr) 110px 120px 90px 20px;min-width:900px';
@@ -145,31 +140,80 @@ const nsCount=()=>{const n=nsl().length;return n==NS.length?NS.length+' nhân s�
 function nsUpd(){const l=$('#nl'),c=$('#nc');if(l)l.innerHTML=nsList();if(c)c.textContent=nsCount()}
 function aNs(){const f=S.nf,ps=[...new Set([...POS,...NS.map(x=>x.r)].filter(Boolean))];
 return `<div class="hd"><div><h1>Nhân sự</h1><div class="sub">Danh sách nhân sự toàn trường. Bấm vào tên để xem chi tiết, sửa thông tin, phân quyền, tạm dừng hoặc xóa tài khoản.</div></div><button class="btn p" data-m="nsa">+ Thêm nhân sự</button></div>
-<div class="fl" data-f5><input data-k="q" type="search" placeholder="Tìm theo tên, email, số điện thoại" value="${esc(f.q)}" style="min-width:240px"><select data-k="r">${opt(ps,f.r,'Mọi chức vụ')}</select><select data-k="t">${opt(TO,f.t,'Mọi tổ chuyên môn')}</select><select data-k="c">${opt(CS,f.c,'Mọi cơ sở')}</select><select data-k="on"><option value="">Mọi trạng thái</option><option value="1" ${f.on=='1'?'selected':''}>Hoạt động</option><option value="0" ${f.on=='0'?'selected':''}>Đã tạm dừng</option></select><select data-k="role">${opt(['admin','leader','staff'],f.role,'Mọi phân quyền')}</select></div>
+<div class="fl" data-f5><input data-k="q" type="search" placeholder="Tìm theo tên, email, số điện thoại" value="${esc(f.q)}" style="min-width:240px"><select data-k="r">${opt(ps,f.r,'Mọi chức vụ')}</select><select data-k="t">${opt(TO,f.t,'Mọi tổ chuyên môn')}</select><select data-k="c">${opt(CS,f.c,'Mọi cơ sở')}</select><select data-k="on"><option value="">Mọi trạng thái</option><option value="1" ${f.on=='1'?'selected':''}>Hoạt động</option><option value="0" ${f.on=='0'?'selected':''}>Đã tạm dừng</option></select><select data-k="role"><option value="">Mọi phân quyền</option>${RLO.map(r=>`<option value="${r}" ${r==f.role?'selected':''}>${rln(r)}</option>`).join('')}</select></div>
 <div class="sub" style="margin:0 0 8px" id="nc">${nsCount()}</div><div class="card sc" id="nl">${nsList()}</div>`}
 /* ---------- STAFF ---------- */
-function sOv(){const L=mine(),c=s=>L.filter(t=>t.st==s).length,LL=S.tab=='Tất cả'?L:flt(L,{st:S.tab}),sn=L.filter(soon).length,rq=c('Yêu cầu bổ sung'),ov=L.filter(od).length;
-const l=isL(),cr=l?created():[],rv=cr.filter(needRev).length,wt=cr.filter(t=>t.st=='Chờ Hiệu trưởng duyệt').length,pd=l?D.filter(d=>!d.ok).length:0;
-return `<div class="hd"><div><h1>Tổng quan</h1><div class="sub">Công việc của bạn, cập nhật thời gian thực</div></div>${l?'<button class="btn p" data-a="go" data-p="cr">+ Tạo nhiệm vụ</button>':'<button class="btn p" data-a="go" data-p="mo">Xem nhiệm vụ</button>'}</div>
-<div class="g4">${stat('b',L.length,'Tổng nhiệm vụ','Trong học kỳ này','go-mo')}${stat('g',c('Chưa tiếp nhận'),'Chưa tiếp nhận','Cần xác nhận','f-Chưa tiếp nhận')}${stat('a',sn,'Sắp đến hạn','Trong 3 ngày tới','f-Sắp đến hạn')}${stat('r',ov,'Quá hạn','Cần nộp hoặc xin gia hạn','f-Quá hạn')}${stat('p',rq,'Yêu cầu bổ sung','Cần chỉnh sửa','f-Yêu cầu bổ sung')}${stat('a',c('Chờ duyệt'),'Chờ duyệt','Đã nộp kết quả','f-Chờ duyệt')}</div>
-<div class="cols"><div class="card"><div class="hd" style="margin:0"><div><h2>Nhiệm vụ</h2><div class="sub">Cập nhật lúc 08:30, hôm nay</div></div><button class="btn" data-a="go" data-p="mo">Xem tất cả ›</button></div>
-<div class="tabs">${['Tất cả',...ST].map(x=>`<button class="${S.tab==x?'on':''}" data-a="tab" data-v="${x}">${x}</button>`).join('')}</div>${rows(LL.slice(0,6))}</div>
-<div class="stk"><div class="card"><h2>Điểm cần chú ý</h2><div class="sub">Ưu tiên xử lý trong hôm nay</div>
-<div class="li" data-a="f-Sắp đến hạn"><i class="bd a">${sn}</i><div><b>${sn} nhiệm vụ sắp đến hạn</b><div class="sub">Trong 3 ngày tới</div></div></div>
-<div class="li" data-a="f-Quá hạn"><i class="bd r">${ov}</i><div><b>${ov} nhiệm vụ quá hạn</b><div class="sub">Cần nộp hoặc xin gia hạn</div></div></div>
-<div class="li" data-a="f-Yêu cầu bổ sung"><i class="bd p">${rq}</i><div><b>${rq} yêu cầu bổ sung</b><div class="sub">Cần chỉnh sửa và nộp lại</div></div></div></div>
-${l?`<div class="card"><h2>Nhiệm vụ bạn giao</h2><div class="sub">${cr.length} nhiệm vụ do bạn tạo</div>
-<div class="li" data-a="f-Cần duyệt"><i class="bd a">${rv}</i><div><b>${rv} kết quả chờ bạn duyệt</b><div class="sub">${wt?wt+' kết quả bạn đã duyệt đang chờ Hiệu trưởng duyệt cuối':'Duyệt xong sẽ chuyển Hiệu trưởng duyệt cuối'}</div></div></div>
-<div class="li" data-a="go" data-p="up"><i class="bd p">${pd}</i><div><b>${pd} văn bản chờ phân loại</b><div class="sub">Xem gợi ý của AI và xác nhận</div></div></div>
-<div class="li" data-a="go" data-p="ai"><i class="bd b">${SUG.length}</i><div><b>${SUG.length} nhiệm vụ AI đề xuất</b><div class="sub">Xem lại và giao việc</div></div></div></div>`:''}
-<div class="card"><h2>Thông báo mới</h2><div class="sub">Đồng bộ theo thời gian thực</div>${nots('s',4)}</div></div></div>`}
+/* ---------- TỔNG QUAN: "Hôm nay tôi cần làm gì" ----------
+ Không gọi thêm máy chủ: mọi con số tính từ dữ liệu đã tải (T, D, HS, SUG). Mỗi dòng có nút dẫn thẳng tới nơi xử lý. */
+const OVB={r:['Quá hạn','r'],a:['Hôm nay','a'],b:['Sắp đến hạn','b'],c:['Cần kiểm tra','r'],p:['Yêu cầu bổ sung','p'],n:['Mới giao','g'],w:['Chờ xử lý','g'],l:['Chờ lâu','r']},OVR={r:0,l:1,c:2,a:3,p:4,b:5,n:6,w:7};
+const dago=d=>Math.round((new Date(TD)-new Date(d))/864e5),dleft=d=>Math.round((new Date(d)-new Date(TD))/864e5);
+const ovStat=(n,l,sub,c,attrs)=>`<button class="card ovs" ${attrs} style="font:inherit;color:inherit"><b class="bd-n ${c}">${n}</b><span class="ovl">${l}</span><span class="sub">${sub}</span><span class="ovx">Xem ›</span></button>`;
+const ovRow=x=>`<div class="ovr"><div class="ovb"><span class="bd ${OVB[x.lv][1]}">${OVB[x.lv][0]}</span></div><div class="ovt"><b>${esc(x.t)}</b><div class="sub">${esc(x.s)}</div></div><button class="btn ${x.p===false?'o':'t'}" ${x.at}>${esc(x.b)}</button></div>`;
+const ovIt=(lv,t,s,b,at,p)=>({lv,t,s,b,at,p});
+const tAt=t=>`data-a="open" data-id="${esc(t.id)}"`;
+// Việc của người được giao (nhân viên, văn thư, quản lý cũng có thể được giao)
+function myTaskItems(){const it=[];mine().filter(t=>t.st!='Đã hoàn thành').forEach(t=>{const acc=t.acc.includes(ME),dl=dleft(t.due),hd='Hạn '+fd(t.due)+' · '+(t.by||'')+' giao';
+ if(!acc)it.push(ovIt(od(t)?'r':'n','Tiếp nhận '+t.id+' · '+t.title,hd,'Tiếp nhận',tAt(t)));
+ else if(t.st=='Yêu cầu bổ sung')it.push(ovIt('p',t.id+' · '+t.title,'Nhận xét: '+(t.review||'cần bổ sung'),'Nộp lại',tAt(t)));
+ else if(od(t))it.push(ovIt('r',t.id+' · '+t.title,'Quá hạn '+(-dl)+' ngày · '+hd,'Nộp kết quả',tAt(t)));
+ else if(['Chờ duyệt','Chờ Hiệu trưởng duyệt'].includes(t.st))return;
+ else if(dl==0)it.push(ovIt('a',t.id+' · '+t.title,'Hạn hôm nay · '+(t.by||'')+' giao','Nộp kết quả',tAt(t)));
+ else if(soon(t))it.push(ovIt('b',t.id+' · '+t.title,'Còn '+dl+' ngày · '+hd,'Nộp kết quả',tAt(t)));
+ else it.push(ovIt('w',t.id+' · '+t.title,hd,'Báo cáo tiến độ',tAt(t),false))});return it}
+// Việc của người giao (Hiệu trưởng: mọi nhiệm vụ; quản lý: nhiệm vụ do mình tạo)
+function bossItems(L){const it=[];L.forEach(t=>{
+ if(needRev(t))it.push(ovIt('a','Duyệt kết quả '+t.id+' · '+t.title,t.st=='Chờ Hiệu trưởng duyệt'?t.by+' đã duyệt cấp 1':'Đã nộp kết quả · '+t.as.join(', '),'Duyệt',tAt(t)));
+ if(t.ext)it.push(ovIt('a',t.ext.by+' xin gia hạn '+t.id+' đến '+fd(t.ext.to),'Lý do: '+t.ext.reason,'Xem',tAt(t),false));
+ if(od(t)&&!t.ext)it.push(ovIt('r',t.id+' · '+t.title,'Quá hạn '+dago(t.due)+' ngày · '+t.as.join(', '),'Mở',tAt(t),false))});return it}
+const ovSort=L=>L.sort((x,y)=>OVR[x.lv]-OVR[y.lv]);
+const hsAt=(h,x)=>`data-a="hsopen" data-id="${esc(h.id)}"${x||''}`;
+const ovMini=(h,extra)=>`<div class="ovm"><div style="flex:1;min-width:0"><div class="ovc">${esc(h.id)} · <span>${esc(h.idest)}</span></div><div class="clamp2" style="font-size:13px;margin-top:2px">${esc(h.ty)}</div></div><div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">${extra||`<span class="bd ${HSC[h.st]}">${esc(h.st)}</span>`}</div></div>`;
+// Tệp thành phần văn thư cần xem lại: AI chưa chắc (dưới 75%) mà chưa ai sửa tay, thiếu thông tin, hoặc chưa đưa vào kho
+function fileChecks(){return D.filter(d=>d.hs&&d.hs!='NHAP'&&hsBy(d.hs)&&!aiBusy(d)).map(d=>{const v=fval(d),r=d.ai?.r,touched=r&&['num','date','ag','k','sum'].some(k=>String(r[k]||'')!=String(v[k]||''));
+ const why=!d.ok?'chưa đưa vào kho':!v.k||!v.ag||v.ag=='09'?'thiếu cơ quan ban hành hoặc loại văn bản':!v.sum?'thiếu tóm tắt':r&&r.conf<75&&!touched?'AI chỉ chắc '+r.conf+'%':'';
+ return why?ovIt('c',d.n+' · '+d.hs,why.charAt(0).toUpperCase()+why.slice(1),d.ok?'Nhập tay':'Kiểm tra',`data-a="ovhsed" data-id="${esc(d.id)}" data-hs="${esc(d.hs)}"`,d.ok):null}).filter(Boolean)}
+function ovPage(o){const it=ovSort(o.items),more=it.length>8;
+return `<div class="hd"><div><h1>${esc(o.hello)}</h1><div class="sub" style="font-size:14px">${o.sum}</div></div>${o.btn||''}</div>
+<div class="g4">${o.stats.join('')}</div>
+<div class="ovg"><section class="card"><div class="ovh"><h2>Việc cần xử lý</h2><span class="sub">Xếp theo độ gấp</span></div>${it.slice(0,8).map(ovRow).join('')||'<p class="sub" style="padding:14px 0 0">Không có việc nào cần xử lý.</p>'}${more?`<div class="sub" style="padding-top:10px">Còn ${it.length-8} việc khác ở các trang chức năng.</div>`:''}</section>
+<section class="card"><div class="ovh"><h2>${esc(o.st)}</h2>${o.sa?`<button class="btn" ${o.sa} style="padding:4px 10px;font-size:12px;color:var(--bt)">Xem tất cả ›</button>`:''}</div><div class="sub" style="margin:2px 0 4px">${o.ss||''}</div>${o.side||'<p class="sub">Chưa có.</p>'}</section></div>`}
+const hon=()=>{const g=PR.s?.g;return g=='Nữ'?'cô ':g=='Nam'?'thầy ':''};
+const sumLine=(n,parts)=>n?`Hôm nay có ${n} việc cần ${hon()||'bạn '}xử lý${parts.filter(Boolean).length?': '+parts.filter(Boolean).join(', '):''}.`:'Không có việc nào cần xử lý hôm nay.';
+function aOv(){const rev=T.filter(needRev),ex=T.filter(t=>t.ext),ov=T.filter(od),free=HS.filter(h=>!h.ld),pend=D.filter(d=>!d.ok&&!d.hs).length;
+ const items=[...bossItems(T),...free.map(h=>ovIt(dago(h.up)>=3?'l':'w',h.id+' · '+h.idest+' chưa có người phụ trách','Tải lên '+(dago(h.up)?dago(h.up)+' ngày trước':'hôm nay')+(h.lv?' · '+h.lv:''),'Chọn người phụ trách',hsAt(h)))];
+ if(pend)items.push(ovIt('w',pend+' văn bản chờ phân loại','Xem gợi ý của AI và xác nhận','Phân loại','data-a="go" data-p="up"',false));
+ if(SUG.length)items.push(ovIt('w',SUG.length+' nhiệm vụ AI đề xuất','Xem lại và giao việc','Xem','data-a="go" data-p="ai"',false));
+ const newest=HS.slice().sort((a,b)=>a.up<b.up?1:a.up>b.up?-1:a.id<b.id?1:-1).slice(0,5);
+ return ovPage({hello:'Chào '+hon()+PR.a.n,sum:sumLine(items.length,[rev.length&&rev.length+' kết quả chờ duyệt',ex.length&&ex.length+' đề nghị gia hạn',free.length&&free.length+' công văn chưa có người phụ trách']),
+  stats:[ovStat(rev.length,'Kết quả chờ duyệt','Gồm kết quả quản lý đã duyệt cấp 1','a','data-a="f-Cần duyệt"'),ovStat(ex.length,'Yêu cầu gia hạn','Đang chờ quyết định','b','data-a="f-Yêu cầu gia hạn"'),ovStat(ov.length,'Nhiệm vụ quá hạn','Cần nhắc hoặc gia hạn','r','data-a="f-Quá hạn"'),ovStat(free.length,'Công văn chưa có người phụ trách','Chờ quản lý nhận','p','data-a="hsf-Chờ xác nhận"')],
+  items,st:'Công văn mới đến',ss:newest.length+' hồ sơ gần nhất',sa:'data-a="go" data-p="so"',side:newest.map(h=>`<div class="ovlink" ${hsAt(h)} tabindex="0">${ovMini(h)}</div>`).join('')})}
+function sOv(){const me=myId(),my=mine().filter(t=>t.st!='Đã hoàn thành'),c=s=>my.filter(t=>t.st==s).length;
+ if(isL()){const cr=created(),rev=cr.filter(needRev),mineHs=HS.filter(h=>h.ld==me),noTask=mineHs.filter(h=>!h.nv.length),free=rcvMe()?HS.filter(h=>!h.ld):[];
+  const items=[...myTaskItems(),...bossItems(cr),...noTask.map(h=>ovIt(dago(h.up)>=3?'a':'w',h.id+' · '+h.idest+' đã nhận, chưa giao việc',h.ty,'Giao việc',`data-a="ovasg" data-id="${esc(h.id)}"`))];
+  const lvs=[...new Set(mineHs.map(h=>h.lv).filter(Boolean))],pick=free.slice().sort((a,b)=>(lvs.includes(b.lv)-lvs.includes(a.lv))||(a.up<b.up?1:-1)).slice(0,5);
+  const stats=[ovStat(my.filter(soon).length,'Việc của tôi sắp đến hạn','Trong 3 ngày tới','a','data-a="f-Sắp đến hạn"'),ovStat(rev.length,'Kết quả chờ tôi duyệt','Nhiệm vụ do bạn giao','b','data-a="f-Cần duyệt"')];
+  if(rcvMe())stats.push(ovStat(noTask.length,'Công văn chưa giao việc','Bạn đang phụ trách','p','data-a="go" data-p="hm"'),ovStat(free.length,'Công văn mới chờ nhận','Chưa có người phụ trách','g','data-a="hsf-Chờ xác nhận"'));
+  else stats.push(ovStat(my.filter(od).length,'Việc của tôi quá hạn','Cần nộp hoặc xin gia hạn','r','data-a="f-Quá hạn"'),ovStat(c('Yêu cầu bổ sung'),'Yêu cầu bổ sung','Cần chỉnh và nộp lại','p','data-a="f-Yêu cầu bổ sung"'));
+  const side=rcvMe()?{st:'Công văn mới chưa có người nhận',ss:lvs.length?'Ưu tiên lĩnh vực bạn thường phụ trách: '+lvs.join(', '):'Chọn công văn thuộc lĩnh vực của bạn',sa:'data-a="hsf-Chờ xác nhận"',side:pick.map(h=>ovMini(h,`<span class="bd g">${esc(h.lv||'Chưa phân loại')}</span><button class="btn o" data-a="hstake" data-id="${esc(h.id)}" style="padding:5px 10px;font-size:12px">Nhận phụ trách</button>`)).join('')}
+   :{st:'Nhiệm vụ bạn giao',ss:cr.length+' nhiệm vụ do bạn tạo',sa:'data-a="go" data-p="gm"',side:cr.filter(t=>t.st!='Đã hoàn thành').sort((a,b)=>a.due<b.due?-1:1).slice(0,5).map(t=>`<div class="ovlink" ${tAt(t)} tabindex="0"><div class="ovm"><div style="flex:1;min-width:0"><div class="ovc">${esc(t.id)}</div><div class="clamp2" style="font-size:13px">${esc(t.title)}</div></div><div style="text-align:right">${bds(t)}<div class="sub">Hạn ${fd(t.due)}</div></div></div></div>`).join('')};
+  return ovPage({hello:'Chào '+hon()+PR.l.n,sum:sumLine(items.length,[rev.length&&rev.length+' kết quả chờ duyệt',noTask.length&&noTask.length+' công văn chưa giao việc',free.length&&free.length+' công văn mới chờ nhận']),stats,items,...side})}
+ if(isSec()){const dr=hsDraft(),chk=fileChecks(),free=HS.filter(h=>!h.ld),today=HS.filter(h=>h.up==TD);
+  const items=[...(dr.length?[ovIt('a','Đang tải dở'+(S.hn.idest?' '+S.hn.idest:'')+' ('+dr.length+' tệp)',dr.some(aiBusy)?'AI đang đọc tệp':'Chưa bấm “Xác nhận và tạo hồ sơ”','Tiếp tục','data-a="go" data-p="tn"')]:[]),...chk,...myTaskItems()];
+  return ovPage({hello:'Chào '+hon()+PR.s.n,sum:sumLine(items.length,[dr.length&&'1 công văn đang tải dở',chk.length&&chk.length+' tệp cần kiểm tra',my.length&&my.length+' nhiệm vụ']),btn:'<button class="btn t" data-a="go" data-p="tn">+ Tải công văn</button>',
+   stats:[ovStat(dr.length?1:0,'Công văn đang tải dở',dr.length+' tệp chưa tạo hồ sơ','a','data-a="go" data-p="tn"'),ovStat(chk.length,'Tệp cần kiểm tra','AI chưa chắc hoặc thiếu thông tin','r','data-a="go" data-p="so"'),ovStat(free.length,'Công văn chưa có người phụ trách','Chờ quản lý nhận','p','data-a="hsf-Chờ xác nhận"'),ovStat(my.length,'Nhiệm vụ của tôi','Chưa hoàn thành','b','data-a="go" data-p="mo"')],
+   items,st:'Công văn đã tải hôm nay',ss:today.length+' hồ sơ · '+D.filter(d=>today.some(h=>h.id==d.hs)).length+' tệp đã vào Kho văn bản',sa:'data-a="go" data-p="so"',side:today.map(h=>`<div class="ovlink" ${hsAt(h)} tabindex="0">${ovMini(h)}</div>`).join('')})}
+ // Nhân viên
+ const items=myTaskItems(),mo=TD.slice(0,7),done=mine().filter(t=>t.st=='Đã hoàn thành').map(t=>({t,at:(t.hist.filter(h=>/hoàn thành/.test(h[1])).pop()||[''])[0]})).filter(x=>x.at.slice(0,7)==mo),ontime=done.filter(x=>x.at<=x.t.due).length;
+ return ovPage({hello:'Chào '+hon()+PR.s.n,sum:sumLine(items.length,[c('Chưa tiếp nhận')&&c('Chưa tiếp nhận')+' việc mới giao',my.filter(soon).length&&my.filter(soon).length+' việc đến hạn trong 3 ngày',c('Yêu cầu bổ sung')&&c('Yêu cầu bổ sung')+' yêu cầu bổ sung']),
+  stats:[ovStat(my.filter(t=>!t.acc.includes(ME)).length,'Chưa tiếp nhận','Cần xác nhận','g','data-a="f-Chưa tiếp nhận"'),ovStat(my.filter(soon).length,'Đến hạn trong 3 ngày','Nộp kết quả sớm','a','data-a="f-Sắp đến hạn"'),ovStat(my.filter(od).length,'Quá hạn','Cần nộp hoặc xin gia hạn','r','data-a="f-Quá hạn"'),ovStat(c('Yêu cầu bổ sung'),'Yêu cầu bổ sung','Cần chỉnh và nộp lại','p','data-a="f-Yêu cầu bổ sung"')],
+  items,st:'Tháng này',ss:'Kết quả thực hiện của bạn',sa:'data-a="go" data-p="mo"',side:`<div style="padding:12px 0;border-top:1px solid var(--line)"><div style="display:flex;align-items:baseline;gap:8px"><b style="font-size:32px;color:#1f9d63">${done.length}</b><b>nhiệm vụ đã hoàn thành</b></div><div class="sub" style="margin:4px 0 10px">${done.length?ontime+'/'+done.length+' hoàn thành đúng hạn':'Chưa có nhiệm vụ hoàn thành trong tháng này'}</div><div class="bar"><i style="width:${done.length?ontime/done.length*100:0}%;background:#1f9d63"></i></div></div>`})}
 function sMo(){const f=S.f,L=flt(mine(),f);return `<div class="hd"><div><h1>${isL()?'Nhiệm vụ của tôi':'Nhiệm vụ'}</h1><div class="sub">Tất cả nhiệm vụ được giao cho bạn</div></div></div>
 <div class="fl" data-f2><input data-k="q" placeholder="Tìm theo mã, tên nhiệm vụ, người tạo" value="${esc(f.q)}" style="min-width:240px"><select data-k="st">${opt([...ST,'Sắp đến hạn','Quá hạn','Yêu cầu gia hạn'],f.st,'Mọi trạng thái')}</select><select data-k="pri">${opt(PRI,f.pri,'Mọi mức ưu tiên')}</select><select data-k="cs">${opt(CS,f.cs,'Mọi cơ sở')}</select></div><div class="card">${rows(L)}</div>`}
 function nt(){const r=rk();return `<h1>Thông báo</h1><p class="sub">${r=='a'?'Cập nhật trạng thái và tin nhắn từ nhân viên.':'Nhiệm vụ mới, phản hồi và kết quả phê duyệt.'}</p><div class="card">${nots(r)}</div>`}
 /* Tài liệu liên quan: tệp Hiệu trưởng tải lên, văn bản thêm từ kho và văn bản nguồn (AI tạo nhiệm vụ) – bấm tên để tải */
 const tdocs=t=>{const kd=[...(t.src&&!t.src.gone?[t.src]:[]),...t.docs.filter(d=>!t.src||d.id!=t.src.id)],ld=k=>DLP.has(k)?' ld':'';
-const it=[...t.files.map(f=>`<span class="file${ld('f:'+t.fmap[f])}" data-a="dl" data-v="${esc(f)}" data-dk="f:${esc(t.fmap[f])}" title="Bấm để tải xuống">📎 ${esc(f)}</span>`),
-...kd.map(d=>`<span class="file${ld('d:'+d.id)}" data-a="dldoc" data-v="${esc(d.id)}" data-g="${esc(d.g||'')}" data-dk="d:${esc(d.id)}" title="Bấm để tải xuống">📎 ${esc(d.id)} · ${esc(d.n)}</span>`),
+const it=[...t.files.map(f=>`<div><span class="flink${ld('f:'+t.fmap[f])}" data-a="dl" data-v="${esc(f)}" data-dk="f:${esc(t.fmap[f])}" title="Bấm để tải xuống">${esc(f)}</span></div>`),
+...kd.map(d=>`<div><span class="sub">${esc(d.id)}</span> <span class="flink${ld('d:'+d.id)}" data-a="dldoc" data-v="${esc(d.id)}" data-g="${esc(d.g||'')}" data-dk="d:${esc(d.id)}" title="Bấm để tải xuống">${esc(d.n)}</span></div>`),
 ...(t.src&&t.src.gone?[`<span class="sub">${esc(t.src.id)} (văn bản đã bị xóa khỏi kho)</span>`]:[])];
 return it.join('')||'<span class="sub">Không có</span>'};
 /* ---------- DETAIL ---------- */
@@ -199,7 +243,7 @@ if(!a&&mem){let m;if(!done){const cs=['Đang thực hiện','Yêu cầu bổ sun
 const act=parts.join('<hr style="border:0;border-top:1px solid var(--line);margin:14px 0">')||'<span class="sub">Bạn chỉ có quyền xem nhiệm vụ này.</span>';
 const fl=a=>a.map(f=>`<span class="file" data-a="dl" data-v="${esc(f)}">📎 ${esc(f)}</span>`).join('')||'<span class="sub">Không có</span>';
 return `<div class="hd"><div><button class="btn" data-a="back">← Quay lại</button><h1 style="margin-top:12px">${esc(t.title)}</h1><div><span class="id">${t.id}</span> ${bds(t)}<span class="bd ${t.pri=='Cao'?'r':t.pri=='Thấp'?'g':'a'}">Ưu tiên ${t.pri.toLowerCase()}</span></div></div></div>
-<div class="dt"><div class="stk"><div class="card"><p style="margin-top:0">${esc(t.desc)}</p><div class="kv"><span>Người tạo</span><span>${esc(t.by||'')}${t.byP?` <span class="sub">· ${esc(t.byP)}</span>`:''}</span><span>Người thực hiện</span><span>${t.as.map(esc).join(', ')}</span><span>Đã tiếp nhận</span><span>${t.acc.map(esc).join(', ')||'Chưa có'}${pend&&t.acc.length?` (chưa: ${t.as.filter(x=>!t.acc.includes(x)).map(esc).join(', ')})`:''}</span><span>Cơ sở · Tổ</span><span>${t.cs} · ${t.to}</span><span>Ngày giao</span><span>${fd(t.made)}</span><span>Hạn hoàn thành</span><b class="${od(t)?'late':''}">${fd(t.due)}</b><span>Tài liệu liên quan</span><span>${tdocs(t)}</span></div></div>
+<div class="dt"><div class="stk"><div class="card"><p style="margin-top:0">${esc(t.desc)}</p><div class="kv"><span>Người tạo</span><span>${esc(t.by||'')}${t.byP?` <span class="sub">· ${esc(t.byP)}</span>`:''}</span><span>Người thực hiện</span><span>${t.as.map(esc).join(', ')}</span><span>Đã tiếp nhận</span><span>${t.acc.map(esc).join(', ')||'Chưa có'}${pend&&t.acc.length?` (chưa: ${t.as.filter(x=>!t.acc.includes(x)).map(esc).join(', ')})`:''}</span><span>Cơ sở · Tổ</span><span>${t.cs} · ${t.to}</span>${t.hs?`<span>Hồ sơ công văn</span><span>${hsBy(t.hs)?`<button class="btn" data-a="hsopen" data-id="${esc(t.hs)}" style="padding:2px 8px;font-size:12px">${esc(t.hs)}</button> ${esc(hsBy(t.hs).idest)}`:esc(t.hs)}</span>`:''}<span>Ngày giao</span><span>${fd(t.made)}</span><span>Hạn hoàn thành</span><b class="${od(t)?'late':''}">${fd(t.due)}</b><span>Tài liệu liên quan</span><span>${tdocs(t)}</span></div></div>
 <div class="card"><h2>Hành động</h2><div style="margin-top:10px">${act}</div></div>
 ${add}<div class="card"><h2>Tài liệu và kết quả đã nộp</h2>${t.subs.length?t.subs.map(s=>`<div class="hs"><small>${fd(s.at)} · ${esc(s.by)}</small>${esc(s.text)}<div>${fl(s.files)}</div></div>`).join(''):'<p class="sub">Chưa có lượt nộp nào.</p>'}${t.review?`<p class="sub">Nhận xét gần nhất: ${esc(t.review)}</p>`:''}</div>
 <div class="card"><h2>Lịch sử</h2><div style="height:8px"></div>${[...t.hist.map(h=>[h[0],h[1]]),...t.prog.map(p=>[p.at,`${p.by} cập nhật tiến độ: ${p.done}. Kết quả: ${p.res}. Còn lại: ${p.left||'—'}`]),...t.extH.map(e=>[e.at,`Gia hạn: ${fd(e.old)} → ${fd(e.nw)} (${e.why}; duyệt: ${e.by})`])].sort((x,y)=>x[0]<y[0]?-1:1).map(h=>`<div class="hs"><small>${fd(h[0])}</small>${esc(h[1])}</div>`).join('')}</div></div>
@@ -215,32 +259,33 @@ h=S.m=='me'?`<h2>Hồ sơ cá nhân</h2><div class="sub" style="margin-bottom:12
 :`<h2>Chỉnh sửa hồ sơ</h2><form class="fm" data-f="pe"><label>Họ và tên</label><input name="n" value="${esc(q.n)}" required><div class="row"><div><label>Năm sinh</label><input name="y" type="number" min="1940" max="2012" value="${esc(q.y)}"></div><div><label>Giới tính</label><select name="g">${opt(['Nam','Nữ'],q.g,'—')}</select></div></div><label>Số điện thoại</label><input name="ph" type="tel" value="${esc(q.ph)}"><label>Địa chỉ</label><input name="ad" value="${esc(q.ad)}"><label>Chức vụ</label><select name="r" ${isA()?'':'disabled'}>${opt([...new Set([...POS,q.r].filter(Boolean))],q.r)}</select><div class="row"><div><label>Tổ chuyên môn</label><select name="t" ${isA()?'':'disabled'}>${opt(TO,q.t)}</select></div><div><label>Cơ sở</label><select name="c" ${isA()?'':'disabled'}>${opt(CS,q.c)}</select></div></div>${isA()?'':'<div class="sub" style="margin-top:8px">Email, chức vụ, tổ chuyên môn và cơ sở do Hiệu trưởng cập nhật.</div>'}<button class="btn t" style="width:100%;margin-top:14px">Lưu hồ sơ</button></form>`}
 if(S.m=='nsv'){const x=NS.find(y=>y.id==S.nid);if(!x){S.m=null;return ''}const self=x.id==myId(),K=[['Họ và tên',x.n],['Email',x.em],['Năm sinh',x.y],['Giới tính',x.g],['Số điện thoại',x.ph],['Địa chỉ',x.ad],['Chức vụ',x.r],['Tổ chuyên môn',x.t],['Cơ sở',x.c]];
 h=`<h2>${esc(x.n)}</h2><div style="margin:-4px 0 12px">${onb(x)} ${rlb(x.role)}</div><div class="kv">${K.map(([k,v])=>`<span>${k}</span><span>${esc(v)||'<span class="sub">—</span>'}</span>`).join('')}</div>
-${self?'<p class="sub" style="margin-top:12px">Đây là tài khoản của bạn: không thể tự đổi phân quyền, tạm dừng hoặc xóa.</p>':`<label style="display:block;font-weight:700;margin:16px 0 5px">Phân quyền tài khoản</label><div style="display:flex;gap:8px"><select id="nrole" style="flex:1">${['admin','leader','staff'].map(r=>`<option value="${r}" ${r==x.role?'selected':''}>${r}</option>`).join('')}</select><button class="btn o" data-a="nsrole">Lưu phân quyền</button></div><div class="sub" id="nrd" style="margin-top:4px">${esc(ROLE[x.role]||'')}</div>`}
+${self?'<p class="sub" style="margin-top:12px">Đây là tài khoản của bạn: không thể tự đổi phân quyền, tạm dừng hoặc xóa.</p>':`<label style="display:block;font-weight:700;margin:16px 0 5px">Phân quyền tài khoản</label><div style="display:flex;gap:8px"><select id="nrole" style="flex:1">${RLO.map(r=>`<option value="${r}" ${r==x.role?'selected':''}>${rln(r)}</option>`).join('')}</select><button class="btn o" data-a="nsrole">Lưu phân quyền</button></div><div class="sub" id="nrd" style="margin-top:4px">${esc(ROLE[x.role]||'')}</div>`}
 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px"><button class="btn t" data-m="nse">Sửa thông tin</button>${self?'':`<button class="btn" data-a="nson">${x.on?'Tạm dừng truy cập':'Mở lại truy cập'}</button><button class="btn" data-a="nsdel" style="color:#d23b3b">Xóa nhân sự</button>`}</div>`}
 if(S.m=='nse'||S.m=='nsa'){const ed=S.m=='nse',x=ed?NS.find(y=>y.id==S.nid)||{}:{c:'Trường chính',role:'staff',on:1},self=ed&&x.id==myId();
 h=`<h2>${ed?'Sửa thông tin nhân sự':'Thêm nhân sự mới'}</h2><form class="fm" data-f="nsf"><label>Họ và tên</label><input name="n" value="${esc(x.n||'')}" required><label>Email đăng nhập (Gmail)</label><input name="em" type="email" value="${esc(x.em||'')}" ${self?'readonly':''} required>${self?'<div class="sub">Không đổi được email đăng nhập của chính bạn tại đây.</div>':''}
 <div class="row"><div><label>Năm sinh</label><input name="y" type="number" min="1940" max="2012" value="${esc(x.y||'')}"></div><div><label>Giới tính</label><select name="g">${opt(['Nam','Nữ'],x.g,'—')}</select></div></div><label>Số điện thoại</label><input name="ph" type="tel" value="${esc(x.ph||'')}"><label>Địa chỉ</label><input name="ad" value="${esc(x.ad||'')}">
 <label>Chức vụ</label><select name="r" required>${opt([...new Set([...POS,x.r].filter(Boolean))],x.r||'Giáo viên')}</select><div class="row"><div><label>Tổ chuyên môn</label><select name="t" required>${opt(TO,x.t,'Chọn tổ')}</select></div><div><label>Cơ sở</label><select name="c">${opt(CS,x.c)}</select></div></div>
-${ed?'':`<label>Phân quyền tài khoản</label><select name="role">${['staff','leader','admin'].map(r=>`<option value="${r}">${r} – ${ROLE[r]}</option>`).join('')}</select><label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" name="on" checked style="width:auto"> Cho phép truy cập ngay</label>`}
+${ed?'':`<label>Phân quyền tài khoản</label><select name="role">${['staff','secretary','leader','admin'].map(r=>`<option value="${r}">${rln(r)} – ${ROLE[r]}</option>`).join('')}</select><label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" name="on" checked style="width:auto"> Cho phép truy cập ngay</label>`}
 <button class="btn t" style="width:100%;margin-top:14px">${ed?'Lưu thay đổi':'Thêm nhân sự'}</button></form>${ed?'<button class="btn" style="margin-top:8px;width:100%" data-m="nsv">← Quay lại</button>':''}`}
 return `<div class="ov" data-a="x"><div class="card md" role="dialog" aria-modal="true">${h}<button class="btn" style="margin-top:12px;width:100%" data-a="close">Đóng</button></div></div>`}
 /* ---------- RENDER ---------- */
 function draw(){const a=isA(),p=S.page,u=a?{n:PR.a.n,r:PR.a.r}:{n:PR[S.role].n,r:PR[S.role].r+' · '+PR[S.role].t};let v;
-const pages=a?{ov:aOv,cr:aCr,ai:aAi,mo:aMo,up:aUp,dc:aDc,rp:aRp,ns:aNs,nt}:isL()?{ov:sOv,mo:sMo,cr:aCr,ai:aAi,gm:lMo,up:aUp,dc:lDc,nt}:{ov:sOv,mo:sMo,dc:sDc,nt};
+const pages=a?{ov:aOv,so:hsSo,tn:hsNew,cr:aCr,ai:aAi,mo:aMo,up:aUp,dc:aDc,rp:aRp,ns:aNs,cfg:hsCfg,nt}:isL()?{ov:sOv,...(rcvMe()?{so:hsSo,hm:hsMine}:{}),mo:sMo,cr:aCr,ai:aAi,gm:lMo,up:aUp,dc:lDc,nt}:isSec()?{ov:sOv,so:hsSo,tn:hsNew,mo:sMo,dc:sDc,nt}:{ov:sOv,mo:sMo,dc:sDc,nt};
 if(!pages[p])S.page='ov';   // vai trò vừa đổi: trang cũ không còn quyền thì về Tổng quan
 if(S.tid&&!find(S.tid))S.tid=null;
-if(S.tid)v=dtl();else v=pages[S.page]();
+if(S.hs&&(!hsSee()||!hsBy(S.hs)))S.hs=null;
+if(S.tid)v=dtl();else if(S.hs)v=hsDtl();else v=pages[S.page]();
 const sc=$('#ms')?.scrollTop;
 $('#root').innerHTML=`<div class="app"><aside class="sb"><div class="logo"><i><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-4.5"/><path d="M22 9v6"/></svg></i>THCS NGÔ MÂY</div>${nav()}<button class="me" data-m="me"><span class="av">${ini(u.n)}</span><span style="flex:1"><b>${u.n}</b><small>${u.r}</small></span>›</button></aside>
-<div class="mn"><div class="top"><span>🔍</span><input id="gs" placeholder="Tìm mã nhiệm vụ, văn bản, người thực hiện…" value=""><span class="sub who">${esc(u.r)}</span><button class="btn" data-a="logout">Đăng xuất</button><button class="ibtn" data-a="go" data-p="nt" aria-label="Thông báo">🔔${nl(rk()).some(n=>n.n)?'<b></b>':''}</button></div><main>${v}</main></div></div>${S.m?modal():''}`;
-if(mgr()&&(S.page=='cr'||(S.page=='ai'&&S.sug))&&!S.tid)paintPick();paintDocs();paintEa();const m=$('#ms');if(m)m.scrollTop=sc??m.scrollHeight}
+<div class="mn"><div class="top"><span style="flex:1"></span><span class="sub who">${esc(u.r)}</span><button class="btn" data-a="logout">Đăng xuất</button><button class="ibtn" data-a="go" data-p="nt" aria-label="Thông báo">🔔${nl(rk()).some(n=>n.n)?'<b></b>':''}</button></div><main>${v}</main></div></div>${S.m?modal():''}`;
+if(mgr()&&(S.page=='cr'||(S.page=='ai'&&S.sug)||(S.hs&&S.hsa))&&!S.tid)paintPick();paintDocs();paintEa();const m=$('#ms');if(m)m.scrollTop=sc??m.scrollHeight}
 function toast(x){const e=document.createElement('div');e.className='tst';e.textContent=x;document.body.append(e);setTimeout(()=>e.remove(),2200)}
-const go=(p,t)=>{if(S.page=='nt'&&p!='nt')markRead();S.page=p;S.tid=t||null;S.m=null;S.err='';S.edit=null;if(p!='ai')S.sug=null;if(p!='cr'&&p!='ai')S.dp=[];scrollTo(0,0);draw();if(t)API.warm();if(!editing())refreshSoon()}
-const editing=()=>S.page=='cr'||(S.page=='ai'&&!!S.sug);;
+const go=(p,t)=>{if(S.page=='nt'&&p!='nt')markRead();S.page=p;S.tid=t||null;S.m=null;S.err='';S.edit=null;if(!t){S.hs=S.hsBack||null;S.hsBack=null;S.hsa=false;S.hed=null}if(p!='ai')S.sug=null;if(p!='cr'&&p!='ai')S.dp=[];scrollTo(0,0);draw();if(t)API.warm();if(!editing())refreshSoon()}
+const editing=()=>S.page=='cr'||(S.page=='ai'&&!!S.sug)||(!!S.hs&&S.hsa)||!!S.hed;
 // Mỗi khi chuyển trang, lấy dữ liệu mới nhất ở nền rồi vẽ lại (trừ khi người dùng đang nhập liệu).
 let lastList=Date.now();
 // dirty(): người dùng đang nhập hoặc đã chọn tệp trong biểu mẫu thì không vẽ lại, tránh mất dữ liệu đang nhập.
-function dirty(){const m=document.querySelector('main');if(!m)return false;if(S.edit)return true;if(document.activeElement?.matches?.('input,textarea,select'))return true;
+function dirty(){const m=document.querySelector('main');if(!m)return false;if(S.edit||S.hed)return true;if(document.activeElement?.matches?.('input,textarea,select'))return true;
  return [...m.querySelectorAll('form[data-f] input[type=file]')].some(i=>i.files.length)||[...m.querySelectorAll('form[data-f] textarea,form[data-f] input:not([type=file]):not([type=search])')].some(i=>i.value&&i.value!==i.defaultValue)}
 function refreshSoon(){if(busy||Date.now()-lastList<(CONFIG.NAV_REFRESH_MS??15000))return;load().then(()=>{if(!S.m&&!busy&&!editing()&&!dirty())draw()}).catch(e=>{if(e.code=='AUTH')logout(true)})}
 const efh=()=>S.ef.map(f=>`<span class="chip">${esc(f)}<button type="button" data-a="rmf" data-v="${esc(f)}" aria-label="Xóa ${esc(f)}">✕</button></span>`).join('')||'<span class="sub">Chưa có tài liệu</span>';
@@ -272,8 +317,8 @@ saveFile('thong-ke-nhiem-vu-'+TD+'.pdf',mkpdf(J))}
 /* ---------- TẢI DỮ LIỆU ---------- */
 // loadSeq: nếu có nhiều lần tải chạy song song, chỉ lần gọi MỚI NHẤT được áp dụng (tránh dữ liệu cũ ghi đè dữ liệu mới).
 let loadSeq=0;
-function applyState(d){TD=d.today;ME=d.me.n;PR.a=PR.s=PR.l=d.me;S.role={admin:'a',staff:'s',leader:'l'}[d.me.role];
- T=d.tasks;D=d.docs;N=d.notifs;PPL=d.people;NS=d.staff||[];TAGS=d.tags;SUG=d.sug||[];AGS=d.ags||[];TF=d.tf||{};AIOK=d.ai||0;BV=d.v||'';CONFIG.MAX_FILE_MB=d.maxFileMB||CONFIG.MAX_FILE_MB;lastList=Date.now();setTimeout(kickAi,0)}
+function applyState(d){TD=d.today;ME=d.me.n;PR.a=PR.s=PR.l=d.me;S.role={admin:'a',staff:'s',secretary:'s',leader:'l'}[d.me.role];
+ T=d.tasks;D=d.docs;N=d.notifs;PPL=d.people;NS=d.staff||[];TAGS=d.tags;SUG=d.sug||[];AGS=d.ags||[];TF=d.tf||{};AIOK=d.ai||0;BV=d.v||'';HS=d.hs||[];LVS=d.lvs||[];RCV=d.rcv||[];RCVME=d.me.rcv||0;CONFIG.MAX_FILE_MB=d.maxFileMB||CONFIG.MAX_FILE_MB;lastList=Date.now();setTimeout(kickAi,0)}
 async function load(){const my=++loadSeq;const d=await API.call('bootstrap');if(my!==loadSeq)return;applyState(d)}
 function markRead(){N.forEach(n=>n.n=0);API.call('readNotifs').catch(()=>{})}
 const OK_EXT=/\.(pdf|docx|xlsx|pptx|png|jpe?g|mp4|csv|txt)$/i;
@@ -304,7 +349,7 @@ function runAi(id,retry){RUN.add(id);if(retry){toast('AI đang đọc văn bản
  aiQ=aiQ.then(async()=>{try{const {state}=await API.callR('aiProcess',{docId:id,retry:!!retry});if(state){++loadSeq;applyState(state)}}
   catch(e){if(e.code=='AUTH')return logout(true);if(retry)toast(e.message)}
   finally{RUN.delete(id);if(!S.m&&!busy&&!dirty())draw()}})}
-function kickAi(){if(!sessionStorage.getItem('tok'))return;D.forEach(d=>{if(!d.ok&&d.ai&&d.ai.st=='queued'&&(mgr()||d.mine)&&!KICK.has(d.id)){KICK.add(d.id);runAi(d.id,false)}})}
+function kickAi(){if(!sessionStorage.getItem('tok'))return;D.forEach(d=>{if(!d.ok&&d.ai&&d.ai.st=='queued'&&(mgr()||d.mine||(isSec()&&d.hs))&&!KICK.has(d.id)){KICK.add(d.id);runAi(d.id,false)}})}
 /* ---------- SỰ KIỆN ---------- */
 let busy=false;
 // act: gửi một thao tác ghi lên backend, tải lại dữ liệu, thông báo kết quả và vẽ lại.
@@ -314,8 +359,9 @@ async function act(action,payload,okMsg,done){if(busy)return;busy=true;document.
  finally{busy=false;document.body.style.cursor='';document.body.classList.remove('busy')}}
 document.addEventListener('click',e=>{const b=e.target.closest('[data-a],[data-m]');if(!b)return;const a=b.dataset.a,t=S.tid&&find(S.tid),v=b.dataset.v,id=t&&t.id;
 if(b.dataset.m){S.m=b.dataset.m;return draw()}
+if(a&&hsClick(a,b,e))return;
 if(a=='x'){if(e.target!=b)return;S.m=null;return draw()}if(a=='close'){S.m=null;return draw()}
-if(a=='go')return go(b.dataset.p);if(a=='open')return go(S.page=='nt'||S.page=='ov'?'mo':S.page,b.dataset.id);if(a=='back')return go(S.page);
+if(a=='go'){S.hsBack=null;return go(b.dataset.p)}if(a=='open')return go(S.page=='nt'||S.page=='ov'?'mo':S.page,b.dataset.id);if(a=='back')return go(S.page);
 if(a=='go-mo'){S.f=F0();return go('mo')}
 if(a?.startsWith('f-')){S.f={...F0(),st:a.slice(2)};return go(isL()&&a=='f-Cần duyệt'?'gm':'mo')}
 if(a=='tab'){S.tab=v;return draw()}
@@ -351,22 +397,24 @@ if(a=='del'){if(!confirm('Xóa nhiệm vụ '+id+'?\n\nToàn bộ trao đổi, l
 // ---- Nhân sự ----
 if(a=='nsopen'){S.nid=b.dataset.id;S.m='nsv';return draw()}
 const nx=S.nid&&NS.find(y=>y.id==S.nid),back=()=>{S.m='nsv';draw()};
-if(a=='nsrole'&&nx){const r=$('#nrole').value;if(r==nx.role)return toast('Phân quyền không thay đổi');if(!confirm(`Đổi phân quyền của ${nx.n} từ ${nx.role} thành ${r}?\n\n${r}: ${ROLE[r]}.\n\nCó hiệu lực ngay ở lần tải trang tiếp theo của người này.`))return;return act('setUserRole',{id:nx.id,role:r},'Đã đổi phân quyền thành '+r,back)}
+if(a=='nsrole'&&nx){const r=$('#nrole').value;if(r==nx.role)return toast('Phân quyền không thay đổi');if(!confirm(`Đổi phân quyền của ${nx.n} từ ${rln(nx.role)} thành ${rln(r)}?\n\n${rln(r)}: ${ROLE[r]}.\n\nCó hiệu lực ngay ở lần tải trang tiếp theo của người này.`))return;return act('setUserRole',{id:nx.id,role:r},'Đã đổi phân quyền thành '+rln(r),back)}
 if(a=='nson'&&nx){if(nx.on&&!confirm(`Tạm dừng truy cập của ${nx.n}?\n\nNgười này bị đăng xuất và không đăng nhập được cho tới khi bạn mở lại. Dữ liệu và nhiệm vụ được giữ nguyên.`))return;return act('setUserActive',{id:nx.id,on:!nx.on},nx.on?'Đã tạm dừng truy cập của '+nx.n:'Đã mở lại truy cập cho '+nx.n,back)}
 if(a=='nsdel'&&nx){if(!confirm(`Xóa nhân sự ${nx.n} (${nx.em})?\n\n• Tài khoản bị khóa vĩnh viễn và biến mất khỏi danh sách.\n• Người này được đưa ra khỏi các nhiệm vụ CHƯA hoàn thành (không xóa được nếu đang là người thực hiện duy nhất).\n• Lịch sử các nhiệm vụ cũ vẫn giữ tên người này.\n\nNếu chỉ nghỉ tạm thời, hãy dùng “Tạm dừng truy cập”.`))return;
  return act('deleteUser',{id:nx.id},null,r=>{toast('Đã xóa '+nx.n+(r.removedFrom?.length?', bỏ khỏi '+r.removedFrom.join(', '):''));S.nid=null;draw()})}
 draw()});
 document.addEventListener('change',e=>{const el=e.target,w=el.closest('[data-f2]'),r=el.closest('[data-f3]');
+if(hsChange(el))return;
 if(el.id=='nrole'){const d=$('#nrd');if(d)d.textContent=ROLE[el.value]||'';return}
 if(el.closest('[data-f5]')&&el.tagName=='SELECT'){S.nf[el.dataset.k]=el.value;return nsUpd()}
 if(el.dataset.sel){const id=el.dataset.id,k=$(`[data-sel=k][data-id="${id}"]`).value,ag=$(`[data-sel=ag][data-id="${id}"]`).value;S.sel[id]={k,ag};const sv=$('#sv-'+id);if(sv)sv.innerHTML=svp(k,ag);return}
 if(w){S.f[el.dataset.k]=el.value;draw();$('[data-f2] [data-k=q]')?.focus()}if(r){S.rf[el.dataset.k]=el.value;draw()}
 if(el.closest('[data-f4]')&&el.tagName=='SELECT'){S.kf[el.dataset.k]=el.value;return khoUpd()}
 if(el.closest('#cf')&&el.id!='ps'&&el.id!='ds')paintPick()});
-document.addEventListener('input',e=>{const el=e.target;if(el.closest('[data-f4]')&&el.dataset.k=='q'){S.kf.q=el.value;return khoUpd()}if(el.closest('[data-f5]')&&el.dataset.k=='q'){S.nf.q=el.value;return nsUpd()}if(el.id=='ps')paintPick();if(el.id=='ds')paintDocs();if(el.id=='es')paintEa();if(el.closest('[data-f2]')&&el.dataset.k=='q'){S.f.q=el.value;const c=el.selectionStart;draw();const n=$('[data-f2] [data-k=q]');n.focus();n.setSelectionRange(c,c)}});
-document.addEventListener('keydown',e=>{if(e.key=='Enter'&&e.target.id=='gs'){S.f={...F0(),q:e.target.value};go('mo')}if(e.key=='Escape'&&S.m){S.m=null;draw()}if(e.key=='Enter'&&['open','nsopen'].includes(e.target.dataset.a))e.target.click()});
+document.addEventListener('input',e=>{const el=e.target;if(hsInput(el))return;if(el.closest('[data-f4]')&&el.dataset.k=='q'){S.kf.q=el.value;return khoUpd()}if(el.closest('[data-f5]')&&el.dataset.k=='q'){S.nf.q=el.value;return nsUpd()}if(el.id=='ps')paintPick();if(el.id=='ds')paintDocs();if(el.id=='es')paintEa();if(el.closest('[data-f2]')&&el.dataset.k=='q'){S.f.q=el.value;const c=el.selectionStart;draw();const n=$('[data-f2] [data-k=q]');n.focus();n.setSelectionRange(c,c)}});
+document.addEventListener('keydown',e=>{if(e.key=='Enter'&&e.target.id=='gs'){S.f={...F0(),q:e.target.value};go('mo')}if(e.key=='Escape'&&S.m){S.m=null;draw()}if(e.key=='Enter'&&['open','nsopen','hsopen'].includes(e.target.dataset.a))e.target.click()});
 document.addEventListener('submit',async e=>{e.preventDefault();const f=e.target,k=f.dataset.f,F=Object.fromEntries(new FormData(f)),t=S.tid&&find(S.tid),id=t&&t.id;
 let fl=[];try{fl=await readFiles(f.fl?.files||[])}catch(x){return toast(x.message)}
+if(hsSubmit(k,F,fl,f))return;
 if(k=='chat'){const x=(F.t||'').trim();if(!x)return;return act('sendMsg',{id,text:x})}
 if(k=='create'||k=='sug'){if(!S.pick.length)return toast('Hãy chọn ít nhất một người được giao.');const ids=S.pick.map(n=>PPL.find(p=>p.n==n)?.id).filter(Boolean);
  return act(k=='sug'?'approveSuggestion':'createTask',{id:S.sug,title:F.title,desc:F.desc,pri:F.pri,cs:F.cs,to:F.to,kind:F.kind,due:F.due,assignees:ids,files:fl,docs:S.dp},'Đã giao nhiệm vụ',r=>{S.pick=[];S.dp=[];S.sug=null;go('mo',r.id)})}

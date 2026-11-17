@@ -45,8 +45,9 @@ function authUser_(tok) {
   if (!u || !yes_(u.active) || yes_(u.is_deleted)) throw bad();   // tài khoản bị tạm dừng/xóa thì mất quyền ngay, không cần chờ hết phiên
   return u;
 }
-// Quyền chỉ xét theo app_role: admin (Hiệu trưởng), leader, staff.
+// Quyền chỉ xét theo app_role: admin (Hiệu trưởng), leader, staff, secretary (văn thư = staff + tiếp nhận hồ sơ công văn).
 function isAdmin_(u) { return u.app_role === 'admin'; }
+function isSec_(u) { return u.app_role === 'secretary'; }
 function isLeader_(u) { return u.app_role === 'leader'; }
 function isMgr_(u) { return isAdmin_(u) || isLeader_(u); }   // được tạo nhiệm vụ, tải/phân loại văn bản, nhận đề xuất AI
 function admin_(u) {

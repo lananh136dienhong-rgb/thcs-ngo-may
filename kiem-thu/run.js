@@ -519,4 +519,92 @@ console.log('\n== 22. Leader với văn bản và đề xuất AI');
   ok(!call('skipSuggestion',T.anh,{id:'DX-9002'}).ok&&call('skipSuggestion',T.tt,{id:'DX-9002'}).ok,'leader bỏ qua đề xuất được, staff thì không');
   ok(!call('addTag',T.tt,{name:'Thẻ mới'}).ok&&!call('addAgency',T.tt,{name:'CQ mới'}).ok,'leader không quản lý thẻ/cơ quan');
 }
+console.log('\n== 23. Sổ công văn đến: hồ sơ → tệp thành phần');
+{
+  const bs=tok=>call('bootstrap',tok).data;
+  add('U020','Lê Thu Hà','vanthu@gmail.com','Nhân viên','secretary','Tổ Văn phòng','Trường chính');
+  r=call('login','',{idToken:gtok('vanthu@gmail.com')});ok(r.ok,'tài khoản secretary (văn thư) đăng nhập được');T.vt=r.data.token;
+  ok(bs(T.vt).me.role=='secretary'&&bs(T.vt).hs.length==0&&bs(T.vt).lvs.length==6,'văn thư nhận sổ công văn (trống) và 6 lĩnh vực mặc định');
+  ok(bs(T.anh).hs.length==0&&bs(T.tt).hs.length==0,'staff và leader chưa được cấp quyền không thấy sổ công văn');
+  props.GEMINI_API_KEY='KEY123';props.AI_ENABLED='true';gemini.reply=()=>resp({...GOOD,nhiem_vu:[]});
+  const up=(who,name,extra={})=>call('hsUploadFile',T[who],{name,mime:'application/pdf',data:b64('PDF '+name),...extra});
+  r=up('anh','x.pdf');ok(!r.ok&&r.code=='FORBIDDEN','staff không tải được tệp hồ sơ');
+  r=up('tt','x.pdf');ok(!r.ok&&r.code=='FORBIDDEN','leader không tải được tệp hồ sơ');
+  const f1=up('vt','5918_cong-van.pdf').data,f2=up('vt','phu-luc-1.pdf').data,f3=up('vt','phu-luc-2.pdf').data;
+  ok(f1&&f2&&f3&&f1.id.startsWith('VB-'),'văn thư tải 3 tệp, mỗi tệp một mã văn bản');
+  r=up('vt','phu-luc-1.pdf');ok(!r.ok,'chặn tải trùng tệp trong cùng hồ sơ');
+  let dd=bs(T.vt).docs.filter(d=>d.hs=='NHAP');ok(dd.length==3&&dd.filter(d=>d.hr=='main').length==1&&dd.find(d=>d.id==f1.id).hr=='main','tệp đầu là văn bản chính, còn lại là phụ lục');
+  ok(!bs(T.admin).docs.some(d=>d.hs=='NHAP'&&d.ok),'tệp đang tiếp nhận chưa vào kho');
+  [f1,f2,f3].forEach(f=>call('aiProcess',T.vt,{docId:f.id}));
+  dd=bs(T.vt).docs.filter(d=>d.hs=='NHAP');ok(dd.every(d=>d.ai.st=='ready'&&d.ai.r&&d.ai.r.k=='Công văn'),'AI đọc riêng từng tệp, văn thư thấy đủ kết quả AI');
+  ok(call('aiProcess',T.anh,{docId:f2.id}).ok===false,'staff không chạy AI cho tệp hồ sơ của người khác');
+  r=call('confirmDoc',T.admin,{docId:f1.id,tag:'Công văn',agency:'03'});ok(!r.ok,'tệp hồ sơ không xác nhận được ở mục Tải văn bản');
+  r=call('hsEditFile',T.vt,{docId:f2.id,role:'att',num:'',date:'',ag:'03',k:'Khác',sum:'Phụ lục danh sách'});ok(r.ok,'văn thư sửa tay thông tin tệp');
+  r=call('hsEditFile',T.vt,{docId:f3.id,role:'main',num:'12/TB',date:'2026-10-20',ag:'03',k:'Thông báo',sum:'x'});ok(r.ok,'đặt tệp khác làm văn bản chính');
+  dd=bs(T.vt).docs.filter(d=>d.hs=='NHAP');ok(dd.find(d=>d.id==f3.id).hr=='main'&&dd.find(d=>d.id==f1.id).hr=='att','chỉ còn đúng một văn bản chính');
+  call('hsEditFile',T.vt,{docId:f1.id,role:'main',num:'5918/SGDĐT-TCCB',date:'2026-10-27',ag:'03',k:'Công văn',sum:'Báo cáo thực trạng tư vấn học sinh'});
+  r=call('hsCreate',T.vt,{idest:'5918/SGDĐT-TCCB',so:1144,ty:'',lv:'Không có'});ok(!r.ok,'lĩnh vực phải nằm trong danh mục');
+  r=call('hsCreate',T.vt,{idest:'',so:1144,lv:'Tổ chức cán bộ'});ok(!r.ok,'thiếu số Idest bị từ chối');
+  r=call('hsCreate',T.vt,{idest:'5918/SGDĐT-TCCB',so:1144,ty:'',lv:'Tổ chức cán bộ'});ok(r.ok&&/^HS-\d{4}-0001$/.test(r.data.id),'Xác nhận và tạo hồ sơ: '+(r.data&&r.data.id||r.error));
+  const H1=r.data.id;
+  let h=bs(T.vt).hs.find(x=>x.id==H1);ok(h&&h.st=='Chờ xác nhận'&&h.ty=='Báo cáo thực trạng tư vấn học sinh'&&h.so==1144,'hồ sơ chờ leader xác nhận, trích yếu lấy từ văn bản chính');
+  ok(bs(T.admin).docs.filter(d=>d.hs==H1&&d.ok).length==3,'3 tệp thành phần đã vào Kho văn bản');
+  ok(bs(T.anh).docs.filter(d=>d.hs==H1).length==3,'mọi người thấy tệp trong kho');
+  ok(Object.values(files).filter(f=>f.blob&&/^VB-/.test(f.blob.name)&&f.parent&&f.parent.name=='Cong_van').length>=1,'tệp được chuyển vào thư mục cơ quan/loại trong Drive');
+  r=call('hsCreate',T.vt,{idest:'5918 / sgdđt-tccb',so:1145,lv:'Chuyên môn'});ok(!r.ok&&/đã có trong hồ sơ/.test(r.error),'không cho tạo hồ sơ trùng số Idest (bỏ qua khoảng trắng, hoa thường)');
+  // người được tiếp nhận hồ sơ
+  r=call('rcvAdd',T.vt,{userId:'U003'});ok(!r.ok&&r.code=='FORBIDDEN','văn thư không cấp quyền tiếp nhận');
+  r=call('rcvAdd',T.admin,{userId:'U005'});ok(!r.ok,'chỉ cấp quyền tiếp nhận cho leader');
+  ok(call('rcvAdd',T.admin,{userId:'U003'}).ok&&call('rcvAdd',T.admin,{userId:'U002'}).ok,'Hiệu trưởng cấp quyền tiếp nhận cho 2 leader');
+  ok(bs(T.tt).me.rcv==1&&bs(T.tt).hs.length==1,'leader được cấp quyền thấy sổ công văn');
+  r=call('hsTake',T.anh,{hsId:H1});ok(!r.ok&&r.code=='FORBIDDEN','staff không nhận phụ trách');
+  ok(call('hsTake',T.tt,{hsId:H1}).ok,'leader nhận phụ trách');
+  h=bs(T.admin).hs.find(x=>x.id==H1);ok(h.st=='Đang thực hiện'&&h.ld=='U003','hồ sơ chuyển Đang thực hiện');
+  r=call('hsTake',T.pht,{hsId:H1});ok(!r.ok&&/đã do/.test(r.error),'mỗi hồ sơ chỉ một người phụ trách');
+  r=call('hsAssign',T.pht,{hsId:H1,title:'x',due:'2026-11-20',assignees:['U005']});ok(!r.ok&&r.code=='FORBIDDEN','leader khác không giao việc từ hồ sơ');
+  r=call('hsSetLeader',T.tt,{hsId:H1,userId:'U002'});ok(!r.ok&&r.code=='FORBIDDEN','leader không đổi được người phụ trách');
+  ok(call('hsSetLeader',T.admin,{hsId:H1,userId:'U002'}).ok&&bs(T.admin).hs.find(x=>x.id==H1).ld=='U002','Hiệu trưởng đổi người phụ trách');
+  r=call('hsSetLeader',T.admin,{hsId:H1,userId:'U005'});ok(!r.ok,'chỉ đổi sang người được tiếp nhận hồ sơ');
+  call('hsSetLeader',T.admin,{hsId:H1,userId:'U003'});
+  r=call('hsAssign',T.tt,{hsId:H1,title:'Báo cáo thực trạng',desc:'Chi tiết',pri:'Cao',due:'2026-11-20',assignees:['U005','U020']});ok(r.ok,'leader phụ trách giao việc cho nhiều người');
+  const NV=r.data.id,tk=bs(T.tt).tasks.find(t=>t.id==NV);
+  ok(tk&&tk.hs==H1&&tk.docs.length==3&&tk.as.length==2&&tk.desc=='Chi tiết','nhiệm vụ gắn hồ sơ, kèm 3 tệp từ kho, 2 người thực hiện');
+  h=bs(T.admin).hs.find(x=>x.id==H1);ok(h.st=='Đã giao việc'&&h.nv.includes(NV),'hồ sơ Đã giao việc, có mã nhiệm vụ');
+  ok(bs(T.anh).tasks.some(t=>t.id==NV),'người thực hiện thấy nhiệm vụ');
+  const other=bs(T.admin).docs.find(d=>d.ok&&!d.hs);
+  r=call('hsAssign',T.tt,{hsId:H1,title:'Việc 2',due:'2026-11-21',assignees:['U005'],docs:[f1.id,other.id]});ok(r.ok&&bs(T.tt).tasks.find(t=>t.id==r.data.id).docs.length==2,'giao việc từ hồ sơ được thêm văn bản khác trong kho');
+  r=call('hsCreate',T.vt,{idest:'X-1',so:'12a',lv:'Chuyên môn'});ok(!r.ok&&/Số đến/.test(r.error),'số đến phải là chữ số');
+  // thêm, sửa, xóa tệp sau khi tạo hồ sơ
+  const f4=up('vt','bo-sung.pdf',{hsId:H1}).data;ok(f4&&f4.id,'văn thư thêm tệp vào hồ sơ đã tạo');
+  call('aiProcess',T.vt,{docId:f4.id});
+  ok(!bs(T.anh).docs.some(d=>d.id==f4.id),'tệp mới chưa vào kho cho tới khi xác nhận');
+  r=call('hsEditFile',T.vt,{docId:f4.id,role:'att',num:'',date:'',ag:'03',k:'Khác',sum:'Bổ sung',confirm:true});ok(r.ok&&bs(T.anh).docs.some(d=>d.id==f4.id&&d.ok),'xác nhận đưa tệp bổ sung vào kho');
+  r=call('hsEditFile',T.vt,{docId:f1.id,role:'att',num:'',date:'',ag:'03',k:'Công văn',sum:''});ok(!r.ok,'không bỏ văn bản chính khi chưa có văn bản chính khác');
+  r=call('hsEditFile',T.vt,{docId:f2.id,role:'att',num:'',date:'',ag:'04',k:'Khác',sum:'Phụ lục'});ok(r.ok&&bs(T.admin).docs.find(d=>d.id==f2.id).ag=='04','đổi cơ quan ban hành, tệp được xếp lại trong kho');
+  r=call('hsRemoveFile',T.anh,{docId:f2.id});ok(!r.ok&&r.code=='FORBIDDEN','staff không xóa tệp');
+  ok(call('hsRemoveFile',T.vt,{docId:f1.id}).ok,'văn thư xóa văn bản chính');
+  dd=bs(T.admin).docs.filter(d=>d.hs==H1);ok(!dd.some(d=>d.id==f1.id)&&dd.filter(d=>d.hr=='main').length==1,'tệp bị gỡ khỏi kho, tệp khác tự thành văn bản chính');
+  ok(bs(T.tt).tasks.find(t=>t.id==NV).docs.length==2,'nhiệm vụ tự bỏ liên kết tệp đã xóa');
+  // cài đặt
+  ok(call('lvAdd',T.admin,{name:'Thi đua – Khen thưởng'}).ok&&bs(T.vt).lvs.includes('Thi đua – Khen thưởng'),'Hiệu trưởng thêm lĩnh vực');
+  ok(!call('lvAdd',T.vt,{name:'X'}).ok,'văn thư không sửa danh mục lĩnh vực');
+  ok(call('lvDelete',T.admin,{name:'Tổ chức cán bộ'}).ok&&bs(T.admin).hs.find(x=>x.id==H1).lv=='','xóa lĩnh vực: hồ sơ chuyển về chưa phân loại');
+  r=call('hsUpdate',T.vt,{hsId:H1,lv:'Chuyên môn'});ok(!r.ok&&r.code=='FORBIDDEN','văn thư không đổi lĩnh vực khi hồ sơ đã có người phụ trách');
+  ok(call('hsUpdate',T.admin,{hsId:H1,lv:'Chuyên môn'}).ok,'Hiệu trưởng đổi lĩnh vực');
+  r=call('rcvRemove',T.admin,{userId:'U003'});ok(r.ok&&r.data.keep.includes(H1),'bỏ quyền tiếp nhận, hồ sơ đang phụ trách được giữ');
+  ok(bs(T.tt).hs.length==0&&bs(T.tt).tasks.some(t=>t.id==NV),'leader bị bỏ quyền không thấy sổ nhưng vẫn quản lý nhiệm vụ đã giao');
+  // xóa hồ sơ
+  r=call('hsDelete',T.vt,{hsId:H1});ok(!r.ok&&r.code=='FORBIDDEN','văn thư không xóa hẳn hồ sơ');
+  r=call('hsDelete',T.admin,{hsId:H1});ok(r.ok&&r.data.tasks.includes(NV),'Hiệu trưởng xóa hồ sơ');
+  ok(!bs(T.admin).hs.some(x=>x.id==H1)&&!bs(T.admin).docs.some(d=>d.hs==H1),'hồ sơ và tệp biến mất khỏi sổ và kho');
+  ok(bs(T.admin).tasks.some(t=>t.id==NV),'nhiệm vụ đã giao vẫn còn');
+  // tạo lại cùng số Idest sau khi xóa, mã hồ sơ không cấp lại
+  const f5=up('vt','5918-lai.pdf').data;call('aiProcess',T.vt,{docId:f5.id});
+  r=call('hsCreate',T.vt,{idest:'5918/SGDĐT-TCCB',so:1144,lv:'Chuyên môn'});ok(r.ok&&r.data.id!=H1,'tạo lại được số Idest đã xóa, mã hồ sơ mới '+(r.data&&r.data.id));
+  // phân quyền
+  ok(call('setUserRole',T.admin,{id:'U020',role:'staff'}).ok&&call('setUserRole',T.admin,{id:'U020',role:'secretary'}).ok,'đổi phân quyền secretary qua lại');
+  ok(call('rcvAdd',T.admin,{userId:'U002'}).ok===false,'U002 đã có trong danh sách');
+  call('setUserRole',T.admin,{id:'U002',role:'staff'});ok(!bs(T.admin).rcv.some(x=>x.id=='U002'),'hết là leader thì tự bỏ khỏi danh sách tiếp nhận');
+  call('setUserRole',T.admin,{id:'U002',role:'leader'});
+}
 console.log(`\nKẾT QUẢ: ${pass} đạt, ${fail} lỗi`);process.exit(fail?1:0);

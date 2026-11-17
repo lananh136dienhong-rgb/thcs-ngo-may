@@ -14,7 +14,11 @@ function routes_() {
     downloadTaskFile: apiDownloadTaskFile_,
     uploadDoc: apiUploadDoc_, confirmDoc: apiConfirmDoc_, addAgency: apiAddAgency_, renameAgency: apiRenameAgency_, deleteAgency: apiDeleteAgency_, aiProcess: apiAiProcess_, approveSuggestion: apiApproveSuggestion_, skipSuggestion: apiSkipSuggestion_, deleteDoc: apiDeleteDoc_, downloadDoc: apiDownloadDoc_,
     addTag: apiAddTag_, renameTag: apiRenameTag_, deleteTag: apiDeleteTag_, updateProfile: apiUpdateProfile_,
-    addUser: apiAddUser_, updateUser: apiUpdateUser_, setUserActive: apiSetUserActive_, setUserRole: apiSetUserRole_, deleteUser: apiDeleteUser_
+    addUser: apiAddUser_, updateUser: apiUpdateUser_, setUserActive: apiSetUserActive_, setUserRole: apiSetUserRole_, deleteUser: apiDeleteUser_,
+    // Sổ công văn đến (HoSo.gs)
+    hsUploadFile: apiHsUploadFile_, hsCreate: apiHsCreate_, hsEditFile: apiHsEditFile_, hsRemoveFile: apiHsRemoveFile_, hsUpdate: apiHsUpdate_,
+    hsTake: apiHsTake_, hsSetLeader: apiHsSetLeader_, hsAssign: apiHsAssign_, hsDelete: apiHsDelete_,
+    lvAdd: apiLvAdd_, lvDelete: apiLvDelete_, rcvAdd: apiRcvAdd_, rcvRemove: apiRcvRemove_
   };
 }
 
@@ -26,7 +30,9 @@ function apiBootstrap_(u) {
     ags: agencies_().map(function (a) { return { c: a.code, n: a.name, f: a.folder }; }),
     tf: Db.all('DocTags').filter(function (t) { return yes_(t.active); }).reduce(function (m, t) { m[t.tag_name] = typeFolder_(t.tag_name); return m; }, {}),
     tags: Db.all('DocTags').filter(function (t) { return yes_(t.active); }).map(function (t) { return t.tag_name; }),
-    maxFileMB: CFG.MAX_FILE_MB
+    maxFileMB: CFG.MAX_FILE_MB,
+    // Sổ công văn đến: danh sách hồ sơ (admin, văn thư, leader được tiếp nhận), lĩnh vực, người được tiếp nhận hồ sơ
+    hs: hsView_(u), lvs: lvs_(), rcv: rcvView_(u)
   };
 }
 function apiGetTask_(u, r) { return tasksView_(u, String(r.id))[0] || null; }
@@ -38,7 +44,7 @@ function apiReadNotifs_(u) {
   return true;
 }
 function me_(u) {
-  return { id: u.user_id, n: u.full_name, em: u.email, y: u.birth_year === '' ? '' : String(u.birth_year), g: u.gender || '', ph: phoneView_(u.phone), ad: u.address || '', r: u.position, t: u.department, c: u.campus, role: u.app_role };
+  return { id: u.user_id, n: u.full_name, em: u.email, y: u.birth_year === '' ? '' : String(u.birth_year), g: u.gender || '', ph: phoneView_(u.phone), ad: u.address || '', r: u.position, t: u.department, c: u.campus, role: u.app_role, rcv: isRcv_(u) ? 1 : 0 };
 }
 function peopleView_(u) {   // danh sách nhân sự có thể được giao việc: chỉ gửi cho admin và leader
   if (!isMgr_(u)) return [];
@@ -56,13 +62,16 @@ function userNames_() {
   Db.all('Users').forEach(function (x) { name[x.user_id] = x.full_name; });
   return name;
 }
-// mgr = admin hoặc leader: xem cả văn bản đang chờ phân loại và đầy đủ gợi ý của AI.
+// mgr = admin hoặc leader: xem cả văn bản đang chờ phân loại và đầy đủ gợi ý của AI. Văn thư xem đầy đủ gợi ý AI của tệp thuộc hồ sơ công văn.
+// hs: mã hồ sơ công văn ('NHAP' = đang tiếp nhận), hr: main (văn bản chính) | att (phụ lục), dd: ngày văn bản.
 function docView_(d, mgr, name, u) {
-  return { id: d.doc_id, n: d.name, sz: d.size_bytes, d: String(d.uploaded_at).slice(0, 10), by: name[d.uploaded_by] || '', k: d.tag || '', ok: yes_(d.reviewed) ? 1 : 0, g: d.drive_file_id, ag: code_(d.agency), no: d.doc_no || '', sm: d.summary || '', ai: aiDocView_(d, mgr), mine: d.uploaded_by === u.user_id ? 1 : 0 };
+  return { id: d.doc_id, n: d.name, sz: d.size_bytes, d: String(d.uploaded_at).slice(0, 10), by: name[d.uploaded_by] || '', k: d.tag || '', ok: yes_(d.reviewed) ? 1 : 0, g: d.drive_file_id, ag: code_(d.agency), no: d.doc_no || '', sm: d.summary || '', ai: aiDocView_(d, mgr || (isSec_(u) && !!d.hs_id)), mine: d.uploaded_by === u.user_id ? 1 : 0,
+    hs: d.hs_id || '', hr: d.hs_role || '', dd: d.doc_date || '' };
 }
 function docsView_(u) {
   const mgr = isMgr_(u), name = userNames_();
-  return Db.all('Documents').filter(function (d) { return !yes_(d.is_deleted) && (mgr || yes_(d.reviewed) || d.uploaded_by === u.user_id); })
+  const sec = isSec_(u);
+  return Db.all('Documents').filter(function (d) { return !yes_(d.is_deleted) && (mgr || yes_(d.reviewed) || d.uploaded_by === u.user_id || (sec && d.hs_id && d.hs_id !== HS_DRAFT)); })
     .map(function (d) { return docView_(d, mgr, name, u); });
 }
 function tasksView_(u, onlyId) {
@@ -89,7 +98,7 @@ function tasksView_(u, onlyId) {
       id: id, title: t.title, desc: t.description, pri: t.priority, cs: t.campus, to: t.department, kind: t.target_type,
       src: t.src_doc ? (docById[t.src_doc] && !yes_(docById[t.src_doc].is_deleted) ? { id: t.src_doc, n: docById[t.src_doc].name, g: docById[t.src_doc].drive_file_id } : { id: t.src_doc, n: '', gone: 1 }) : null,
       docs: (TD[id] || []).filter(function (x) { return docById[x.doc_id] && !yes_(docById[x.doc_id].is_deleted); }).map(function (x) { return { id: x.doc_id, n: docById[x.doc_id].name, g: docById[x.doc_id].drive_file_id }; }),
-      due: t.due_date, st: t.status, made: String(t.created_at).slice(0, 10), review: t.review_comment || '',
+      due: t.due_date, st: t.status, made: String(t.created_at).slice(0, 10), review: t.review_comment || '', hs: t.hs_id || '',
       // người tạo: tên, mã, chức vụ (Hiệu trưởng nếu là admin)
       by: nm(t.created_by), byId: t.created_by, byP: role[t.created_by] === 'admin' ? 'Hiệu trưởng' : (pos[t.created_by] || ''),
       as: as.map(function (a) { return nm(a.user_id); }),

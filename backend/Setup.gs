@@ -56,6 +56,7 @@ function setup() {
       Db.append('DocTags', { tag_id: 'TG' + String(i + 1).padStart(2, '0'), tag_name: n, active: true });
     });
   }
+  seedLv_();   // lĩnh vực mặc định của hồ sơ công văn
   Logger.log('XONG. Google Sheet: ' + ss.getUrl());
   Logger.log('Thư mục Drive: ' + root.getUrl());
   Logger.log('Bước tiếp theo: thêm nhân viên vào sheet Users, rồi Deploy → New deployment → Web app.');
@@ -70,7 +71,7 @@ function checkUsers() {
     if (emails[em]) problems.push(tag + 'email trùng với dòng ' + emails[em]); else emails[em] = u._row;
     const nk = String(u.full_name).trim().toLowerCase();
     if (names[nk]) problems.push(tag + 'họ tên trùng với dòng ' + names[nk] + ' (hệ thống cần họ tên không trùng nhau)'); else names[nk] = u._row;
-    if (LISTS.role.indexOf(u.app_role) < 0) problems.push(tag + 'app_role phải là admin, leader hoặc staff');
+    if (LISTS.role.indexOf(u.app_role) < 0) problems.push(tag + 'app_role phải là admin, leader, staff hoặc secretary');
     if (LISTS.dept.indexOf(u.department) < 0) problems.push(tag + 'department không nằm trong danh mục');
     if (LISTS.campus.indexOf(u.campus) < 0) problems.push(tag + 'campus không nằm trong danh mục');
   });
@@ -113,6 +114,7 @@ function upgrade() {
   });
   Db.clearAll();
   seedAgencies_();
+  if (!Db.all('LinhVuc').length) { seedLv_(); log.push('Thêm các lĩnh vực mặc định cho Danh sách công văn'); }
   // Thêm các thẻ loại văn bản mặc định còn thiếu (không xóa hay sửa thẻ đang có).
   const tags = Db.all('DocTags');
   DEFAULT_TAGS.forEach(function (n) {

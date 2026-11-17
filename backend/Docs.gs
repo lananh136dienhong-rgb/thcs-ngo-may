@@ -113,6 +113,7 @@ function fileDoc_(d, ag, tag) {
 function apiConfirmDoc_(u, r) {
   mgr_(u);
   const d = doc_(r.docId), tag = String(r.tag || ''), ag = agency_(r.agency);
+  if (d.hs_id) throw new AppError('Văn bản này thuộc hồ sơ công văn, hãy xác nhận trong mục Danh sách công văn', 'BAD');
   if (yes_(d.reviewed)) throw new AppError('Văn bản này đã được phân loại rồi', 'BAD');
   if (!Db.all('DocTags').some(function (t) { return yes_(t.active) && t.tag_name === tag; })) throw new AppError('Hãy chọn loại văn bản', 'BAD');
   if (d.ai_status === 'reading' && minutesSince_(d.ai_at) <= AI.STALE_MIN) throw new AppError('AI đang đọc văn bản này, vui lòng chờ vài giây rồi thử lại', 'BAD');
@@ -148,13 +149,15 @@ function wipeDoc_(d) {
 }
 function apiDeleteDoc_(u, r) {
   admin_(u);   // chỉ Hiệu trưởng xóa được văn bản trong kho (leader không xóa được)
-  wipeDoc_(doc_(r.docId));
+  const d = doc_(r.docId);
+  if (d.hs_id && d.hs_id !== HS_DRAFT) return hsRemoveDoc_(d);   // tệp thuộc hồ sơ: giữ hồ sơ luôn có văn bản chính
+  wipeDoc_(d);
   return true;
 }
 // Nhân viên chỉ tải được văn bản đã phân loại (hoặc do chính mình tải lên); Hiệu trưởng và leader tải được mọi văn bản.
 function apiDownloadDoc_(u, r) {
   const d = doc_(r.docId);
-  if (!isMgr_(u) && !yes_(d.reviewed) && d.uploaded_by !== u.user_id) throw new AppError('Văn bản này chưa được Hiệu trưởng phân loại', 'FORBIDDEN');
+  if (!isMgr_(u) && !yes_(d.reviewed) && d.uploaded_by !== u.user_id && !(isSec_(u) && d.hs_id)) throw new AppError('Văn bản này chưa được Hiệu trưởng phân loại', 'FORBIDDEN');
   const b = b64_(d.drive_file_id);
   return { name: d.name, mime: b.mime, data: b.data };
 }
@@ -188,7 +191,7 @@ function apiDeleteTag_(u, r) {
 }
 
 // ---- hồ sơ cá nhân và quản lý nhân sự ----
-// Quyền trong hệ thống chỉ theo app_role (admin / leader / staff); chức vụ chỉ để hiển thị, đổi chức vụ KHÔNG làm thay đổi quyền.
+// Quyền trong hệ thống chỉ theo app_role (admin / leader / staff / secretary); chức vụ chỉ để hiển thị, đổi chức vụ KHÔNG làm thay đổi quyền.
 const NOT_DELETED = function (x) { return !yes_(x.is_deleted); };
 function nameOk_(v, selfId) {
   const n = str_(v, 60, 'Họ và tên', true);
@@ -301,6 +304,7 @@ function apiSetUserRole_(u, r) {
   if (x.user_id === u.user_id) throw new AppError('Bạn không thể đổi phân quyền của chính mình', 'BAD');
   if (role !== 'admin') keepAdmin_(x);
   Db.update('Users', x._row, { app_role: role });
+  if (role !== 'leader') Db.removeWhere('HsReceivers', function (y) { return y.user_id === x.user_id; });   // chỉ leader được tiếp nhận hồ sơ
   return true;
 }
 // Xóa nhân sự đã nghỉ việc: tài khoản bị khóa vĩnh viễn và ẩn khỏi danh sách, nhưng dòng trong sheet Users được giữ lại
@@ -320,6 +324,7 @@ function apiDeleteUser_(u, r) {
     hist_(t.task_id, u.user_id, 'bot_nguoi', 'Hiệu trưởng đưa ' + x.full_name + ' ra khỏi nhiệm vụ (nhân sự đã nghỉ việc)');
   });
   Db.removeWhere('Notifications', function (n) { return n.to_user_id === x.user_id; });
+  Db.removeWhere('HsReceivers', function (y) { return y.user_id === x.user_id; });
   Db.update('Users', x._row, { active: false, is_deleted: true });
   return { removedFrom: open.map(function (t) { return t.task_id; }) };
 }

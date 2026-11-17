@@ -218,9 +218,9 @@ function aiRunDoc_(docId, force) {
   return { status: finalStatus };
 }
 function apiAiProcess_(u, r) {
-  const d = doc_(r.docId);
-  if (!isMgr_(u) && d.uploaded_by !== u.user_id) throw new AppError('Bạn không có quyền chạy AI cho văn bản này', 'FORBIDDEN');
-  return aiRunDoc_(d.doc_id, isMgr_(u) && !!r.retry);
+  const d = doc_(r.docId), sec = isSec_(u) && !!d.hs_id;   // văn thư chạy AI cho tệp thuộc hồ sơ công văn
+  if (!isMgr_(u) && !sec && d.uploaded_by !== u.user_id) throw new AppError('Bạn không có quyền chạy AI cho văn bản này', 'FORBIDDEN');
+  return aiRunDoc_(d.doc_id, (isMgr_(u) || sec) && !!r.retry);
 }
 // Bộ hẹn giờ (xem installAiTrigger trong Setup.gs): xử lý các văn bản còn xếp hàng.
 function aiSweep() {
